@@ -198,13 +198,13 @@ def tld_browse_page(tld, slug):
     if data is None:
         abort(404)
 
-    info = load_tld_info(tld)
+    #info = load_tld_info(tld)
     sizes = get_download_sizes(tld)
 
     return render_template(
         "tld_browse.html",
         data=data,
-        info=info,
+        #info=info,
         sizes=sizes,
         kind=kind,
         slug=slug,
