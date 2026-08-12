@@ -2,6 +2,7 @@
 import json
 from pathlib import Path
 from flask import Flask, render_template, abort, send_file
+import gzip
 
 app = Flask(__name__)
 
@@ -10,6 +11,7 @@ app = Flask(__name__)
 # ==============================================================
 BASE_DIR = Path(__file__).resolve().parent
 JSON_FOLDER = BASE_DIR / "json"
+DOMAINS_PER_PAGE = 100
 
 
 # ==============================================================
@@ -61,6 +63,30 @@ def load_tlds():
 
     return sorted(tlds, key=lambda x: x.get("tld", ""))
 
+def human_size(num_bytes):
+    if num_bytes is None:
+        return None
+    size = float(num_bytes)
+    for unit in ("B", "KB", "MB", "GB"):
+        if size < 1024:
+            return f"{size:.0f}{unit}" if unit == "B" else f"{size:.1f}{unit}"
+        size /= 1024
+    return f"{size:.1f}TB"
+
+
+def get_download_sizes(tld):
+    date = latest_date_with_domains(tld)
+    if date is None:
+        return {"domains": None, "new": None, "deleted": None}
+
+    sizes = {}
+    for kind in ("domains", "new", "deleted"):
+        path = LISTS_FOLDER / date / kind / f"{tld}.txt.gz"
+        sizes[kind] = path.stat().st_size if path.exists() else None
+    return sizes
+    
+    return sorted(tlds, key=lambda x: x.get("tld", ""))
+
 
 # ==============================================================
 # Routes
@@ -86,28 +112,6 @@ def index():
         tlds=tlds,
     )
 
-def human_size(num_bytes):
-    if num_bytes is None:
-        return None
-    size = float(num_bytes)
-    for unit in ("B", "KB", "MB", "GB"):
-        if size < 1024:
-            return f"{size:.0f}{unit}" if unit == "B" else f"{size:.1f}{unit}"
-        size /= 1024
-    return f"{size:.1f}TB"
-
-
-def get_download_sizes(tld):
-    date = latest_date_with_domains(tld)
-    if date is None:
-        return {"domains": None, "new": None, "deleted": None}
-
-    sizes = {}
-    for kind in ("domains", "new", "deleted"):
-        path = LISTS_FOLDER / date / kind / f"{tld}.txt.gz"
-        sizes[kind] = path.stat().st_size if path.exists() else None
-    return sizes
-
 @app.route("/tld/<tld>")
 def tld_detail(tld):
     tld = tld.lower().strip()
@@ -128,6 +132,79 @@ def tld_detail(tld):
         info=info,
         sizes=sizes,
     )
+
+
+# ==============================================================
+# Browse
+# ==============================================================
+
+def browse_domains(tld, date, kind, search, page):
+    """
+    Stream a sorted domains.txt.gz, optionally filter by substring,
+    and return one page of up to DOMAINS_PER_PAGE results plus
+    whether more results exist. Never loads the full file into memory.
+    """
+    path = LISTS_FOLDER / date / kind / f"{tld}.txt.gz"
+    if not path.exists():
+        return [], False, 0
+
+    search = (search or "").strip().lower()
+    start = (page - 1) * DOMAINS_PER_PAGE
+    end = start + DOMAINS_PER_PAGE
+
+    results = []
+    matched_count = 0
+    has_more = False
+
+    with gzip.open(path, "rt", encoding="utf-8", errors="replace") as f:
+        for line in f:
+            domain = line.strip()
+            if not domain:
+                continue
+            if search and search not in domain:
+                continue
+
+            if matched_count >= start and matched_count < end:
+                results.append(domain)
+            matched_count += 1
+
+            if matched_count >= end:
+                has_more = True
+                break
+
+    return results, has_more, matched_count
+
+
+@app.route("/tld/<tld>/browse")
+def browse_tld_domains(tld):
+    from flask import request, jsonify
+
+    tld = tld.lower().strip()
+    if "/" in tld or "\\" in tld:
+        abort(404)
+
+    kind = request.args.get("kind", "domains")
+    if kind not in ("domains", "new", "deleted"):
+        abort(404)
+
+    search = request.args.get("search", "")
+    try:
+        page = max(1, int(request.args.get("page", 1)))
+    except ValueError:
+        page = 1
+
+    date = latest_date_with_domains(tld)
+    if date is None:
+        return jsonify({"domains": [], "has_more": False, "page": page})
+
+    domains, has_more, matched_count = browse_domains(tld, date, kind, search, page)
+
+    return jsonify({
+        "domains": domains,
+        "has_more": has_more,
+        "page": page,
+        "per_page": DOMAINS_PER_PAGE,
+    })
 
 
 # ==============================================================
