@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 import json
-from pathlib import Path
-from flask import Flask, render_template, abort, send_file
 import gzip
+from pathlib import Path
+from flask import Flask, render_template, abort, send_file, request, jsonify
 
 app = Flask(__name__)
 
@@ -11,7 +11,14 @@ app = Flask(__name__)
 # ==============================================================
 BASE_DIR = Path(__file__).resolve().parent
 JSON_FOLDER = BASE_DIR / "json"
+LISTS_FOLDER = BASE_DIR / "lists"
 DOMAINS_PER_PAGE = 100
+
+KIND_LABELS = {
+    "domains": "All",
+    "new": "New",
+    "deleted": "Deleted",
+}
 
 
 # ==============================================================
@@ -63,15 +70,26 @@ def load_tlds():
 
     return sorted(tlds, key=lambda x: x.get("tld", ""))
 
-def human_size(num_bytes):
-    if num_bytes is None:
+
+def latest_date_with_domains(tld):
+    """
+    Find the most recent date folder that has a domains file
+    for this TLD (mirrors process_zones.py's snapshot logic).
+    """
+    if not LISTS_FOLDER.exists():
         return None
-    size = float(num_bytes)
-    for unit in ("B", "KB", "MB", "GB"):
-        if size < 1024:
-            return f"{size:.0f}{unit}" if unit == "B" else f"{size:.1f}{unit}"
-        size /= 1024
-    return f"{size:.1f}TB"
+
+    dates = []
+    for date_folder in LISTS_FOLDER.iterdir():
+        if not date_folder.is_dir():
+            continue
+        if (date_folder / "domains" / f"{tld}.txt.gz").exists():
+            dates.append(date_folder.name)
+
+    if not dates:
+        return None
+
+    return sorted(dates, reverse=True)[0]
 
 
 def get_download_sizes(tld):
@@ -84,59 +102,7 @@ def get_download_sizes(tld):
         path = LISTS_FOLDER / date / kind / f"{tld}.txt.gz"
         sizes[kind] = path.stat().st_size if path.exists() else None
     return sizes
-    
-    return sorted(tlds, key=lambda x: x.get("tld", ""))
 
-
-# ==============================================================
-# Routes
-# ==============================================================
-@app.route("/")
-def index():
-    summary = load_summary()
-    if summary is None:
-        summary = {
-            "date": None,
-            "tlds": 0,
-            "domains": 0,
-            "new": 0,
-            "deleted": 0,
-            "last_updated": None,
-            "timezone": None,
-        }
-
-    tlds = load_tlds()
-    return render_template(
-        "index.html",
-        summary=summary,
-        tlds=tlds,
-    )
-
-@app.route("/tld/<tld>")
-def tld_detail(tld):
-    tld = tld.lower().strip()
-    if "/" in tld or "\\" in tld:
-        abort(404)
-
-    latest_file = JSON_FOLDER / tld / "latest"
-    data = load_json(latest_file)
-    if data is None:
-        abort(404)
-
-    info = load_tld_info(tld)
-    sizes = get_download_sizes(tld)
-
-    return render_template(
-        "tld.html",
-        data=data,
-        info=info,
-        sizes=sizes,
-    )
-
-
-# ==============================================================
-# Browse
-# ==============================================================
 
 def browse_domains(tld, date, kind, search, page):
     """
@@ -175,13 +141,95 @@ def browse_domains(tld, date, kind, search, page):
     return results, has_more, matched_count
 
 
-@app.route("/tld/<tld>/browse")
-def browse_tld_domains(tld):
-    from flask import request, jsonify
-
+def validate_tld(tld):
     tld = tld.lower().strip()
     if "/" in tld or "\\" in tld:
         abort(404)
+    return tld
+
+
+# ==============================================================
+# Routes
+# ==============================================================
+@app.route("/")
+def index():
+    summary = load_summary()
+    if summary is None:
+        summary = {
+            "date": None,
+            "tlds": 0,
+            "domains": 0,
+            "new": 0,
+            "deleted": 0,
+            "last_updated": None,
+            "timezone": None,
+        }
+
+    tlds = load_tlds()
+    return render_template(
+        "index.html",
+        summary=summary,
+        tlds=tlds,
+    )
+
+
+@app.route("/tld/<tld>")
+def tld_detail(tld):
+    tld = validate_tld(tld)
+
+    latest_file = JSON_FOLDER / tld / "latest"
+    data = load_json(latest_file)
+    if data is None:
+        abort(404)
+
+    info = load_tld_info(tld)
+    sizes = get_download_sizes(tld)
+
+    return render_template(
+        "tld.html",
+        data=data,
+        info=info,
+        sizes=sizes,
+    )
+
+
+# ==============================================================
+# Browse pages: /tld/<tld>/all, /tld/<tld>/new, /tld/<tld>/deleted
+# ==============================================================
+BROWSE_KIND_BY_SLUG = {
+    "all": "domains",
+    "new": "new",
+    "deleted": "deleted",
+}
+
+
+@app.route("/tld/<tld>/<slug>")
+def tld_browse_page(tld, slug):
+    tld = validate_tld(tld)
+
+    if slug not in BROWSE_KIND_BY_SLUG:
+        abort(404)
+    kind = BROWSE_KIND_BY_SLUG[slug]
+
+    latest_file = JSON_FOLDER / tld / "latest"
+    data = load_json(latest_file)
+    if data is None:
+        abort(404)
+
+    sizes = get_download_sizes(tld)
+
+    return render_template(
+        "tld_browse.html",
+        data=data,
+        sizes=sizes,
+        kind=kind,
+        slug=slug,
+    )
+
+
+@app.route("/tld/<tld>/browse")
+def browse_tld_domains(tld):
+    tld = validate_tld(tld)
 
     kind = request.args.get("kind", "domains")
     if kind not in ("domains", "new", "deleted"):
@@ -210,30 +258,6 @@ def browse_tld_domains(tld):
 # ==============================================================
 # Downloads
 # ==============================================================
-LISTS_FOLDER = BASE_DIR / "lists"
-
-
-def latest_date_with_domains(tld):
-    """
-    Find the most recent date folder that has a domains file
-    for this TLD (mirrors process_zones.py's snapshot logic).
-    """
-    if not LISTS_FOLDER.exists():
-        return None
-
-    dates = []
-    for date_folder in LISTS_FOLDER.iterdir():
-        if not date_folder.is_dir():
-            continue
-        if (date_folder / "domains" / f"{tld}.txt.gz").exists():
-            dates.append(date_folder.name)
-
-    if not dates:
-        return None
-
-    return sorted(dates, reverse=True)[0]
-
-
 @app.route("/tld/<tld>/download/<kind>")
 def download_tld_list(tld, kind):
     tld = tld.lower().strip()
