@@ -24,7 +24,7 @@
     <header class="border-b bg-white">
         <div class="mx-auto max-w-7xl px-6 py-5 flex items-end justify-between">
 
-              <a href="{{ url_for('tld_detail', tld=data.tld) }}"
+              <a href="{{ url_for('index') }}"
                 class="text-sm text-gray-500 hover:text-gray-900"
             >
                 ← All TLDs
@@ -207,9 +207,128 @@
                 </div>
             </div>
 
+
+
+            
+
         </div>
+
+
+{% if info %}
+        <div class="mt-8 rounded-xl border bg-white p-6 shadow-sm">
+            <div class="flex items-center justify-between">
+                <h2 class="text-lg font-semibold">
+                    Registry Information
+                </h2>
+                {% if info.type %}
+                <span class="rounded-full bg-sky-50 px-3 py-1 text-xs font-medium text-sky-700">
+                    {{ info.type }}
+                </span>
+                {% endif %}
+            </div>
+
+            {% if info.description %}
+            <p class="mt-2 text-sm text-gray-500">
+                {{ info.description }}
+            </p>
+            {% endif %}
+
+            <dl class="mt-5 grid gap-4 sm:grid-cols-2">
+                {% if info.sponsor %}
+                <div>
+                    <dt class="text-xs font-medium uppercase text-gray-400">Sponsor</dt>
+                    <dd class="mt-1 text-sm text-gray-900 whitespace-pre-line">{{ info.sponsor }}</dd>
+                </div>
+                {% endif %}
+
+                {% if info.registrationDate %}
+                <div>
+                    <dt class="text-xs font-medium uppercase text-gray-400">Registration date</dt>
+                    <dd class="mt-1 text-sm text-gray-900">{{ info.registrationDate }}</dd>
+                </div>
+                {% endif %}
+
+                {% if info.lastUpdate %}
+                <div>
+                    <dt class="text-xs font-medium uppercase text-gray-400">Record last updated</dt>
+                    <dd class="mt-1 text-sm text-gray-900">{{ info.lastUpdate }}</dd>
+                </div>
+                {% endif %}
+
+                {% if info.whois_server %}
+                <div>
+                    <dt class="text-xs font-medium uppercase text-gray-400">WHOIS server</dt>
+                    <dd class="mt-1 text-sm text-gray-900">{{ info.whois_server }}</dd>
+                </div>
+                {% endif %}
+
+                {% if info.rdap_server %}
+                <div>
+                    <dt class="text-xs font-medium uppercase text-gray-400">RDAP server</dt>
+                    <dd class="mt-1 text-sm text-gray-900">{{ info.rdap_server }}</dd>
+                </div>
+                {% endif %}
+
+                {% if info.registrationServiceURL %}
+                <div>
+                    <dt class="text-xs font-medium uppercase text-gray-400">Registration services</dt>
+                    <dd class="mt-1 text-sm">
+                        <a href="{{ info.registrationServiceURL }}" class="text-sky-600 hover:text-sky-800" target="_blank" rel="noopener">
+                            {{ info.registrationServiceURL }}
+                        </a>
+                    </dd>
+                </div>
+                {% endif %}
+            </dl>
+
+            {% if info.nameservers %}
+            <div class="mt-6">
+                <h3 class="text-xs font-medium uppercase text-gray-400">Name servers</h3>
+                <ul class="mt-2 space-y-1 text-sm text-gray-900">
+                    {% for ns in info.nameservers %}
+                    <li>
+                        {{ ns.name }}
+                        {% if ns.addr %}
+                        <span class="text-gray-400">({{ ns.addr | join(', ') }})</span>
+                        {% endif %}
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+
+            <div class="mt-6 grid gap-6 sm:grid-cols-2">
+                {% if info.admin and (info.admin.address or info.admin.email) %}
+                <div>
+                    <h3 class="text-xs font-medium uppercase text-gray-400">Administrative contact</h3>
+                    {% if info.admin.address %}
+                    <p class="mt-1 text-sm text-gray-900 whitespace-pre-line">{{ info.admin.address }}</p>
+                    {% endif %}
+                    {% for email in info.admin.email %}
+                    <p class="text-sm text-sky-600">{{ email }}</p>
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                {% if info.tech and (info.tech.address or info.tech.email) %}
+                <div>
+                    <h3 class="text-xs font-medium uppercase text-gray-400">Technical contact</h3>
+                    {% if info.tech.address %}
+                    <p class="mt-1 text-sm text-gray-900 whitespace-pre-line">{{ info.tech.address }}</p>
+                    {% endif %}
+                    {% for email in info.tech.email %}
+                    <p class="text-sm text-sky-600">{{ email }}</p>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
+
     </main>
 </div>
+   
 
 </body>
 </html>
