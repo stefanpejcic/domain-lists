@@ -7,7 +7,10 @@
 /home/venv/bin/python /home/process_zones.py
 
 # 3. download tld info
-/home/venv/bin/python /home/tld_scrapper.py
+#NO LONGER USED# /home/venv/bin/python /home/tld_scrapper.py
+
+# todo: generate counters and distribution
+
 
 # 4. cleanup (~9.6G)
 rm -rf /home/downloads/
