@@ -22,13 +22,19 @@
 <div class="min-h-screen">
 
     <header class="border-b bg-white">
-        <div class="mx-auto max-w-7xl px-6 py-5">
-            
+        <div class="mx-auto max-w-7xl px-6 py-5 flex items-end justify-between">
+
               <a href="{{ url_for('tld_detail', tld=data.tld) }}"
                 class="text-sm text-gray-500 hover:text-gray-900"
             >
-                ← .{{ data.tld }} overview
+                ← All TLDs
             </a>
+
+                <div class="text-right text-sm text-gray-500">
+                    Last updated <span class="font-medium text-gray-900">{{ data.last_updated }}</span> <span>{{ data.timezone }}</span>
+                </div>
+         
+
         </div>
     </header>
 
@@ -89,20 +95,20 @@
         <div class="max-w-2xl mx-auto text-center mb-10">
             <h1 class="mx-auto text-3xl font-bold text-gray-900 sm:text-4xl sm:leading-none sm:tracking-tight">
                 {% if kind == 'new' %}
-                Newly registered .{{ data.tld }} domains
+                List of newly registered .{{ data.tld }} domains
                 {% elif kind == 'deleted' %}
-                Deleted .{{ data.tld }} domains
+                List of deleted .{{ data.tld }} domains
                 {% else %}
-                All .{{ data.tld }} domains
+                List of all registered .{{ data.tld }} domains
                 {% endif %}
             </h1>
             <p class="mt-2 text-xl text-gray-600">
                 {% if kind == 'new' %}
-                Domains newly registered in the last 24h.
+                <span class="font-bold text-emerald-600">+{{ "{:,}".format(data.new) }}</span> .{{ data.tld }} domains newly registered in the last 24h.
                 {% elif kind == 'deleted' %}
-                Domains deleted in the last 24h.
+                <span class="font-bold text-red-600">-{{ "{:,}".format(data.deleted) }}</span> .{{ data.tld }} domains deleted in the last 24h.
                 {% else %}
-                Full list of registered .{{ data.tld }} domains.
+                Full list of <span class="font-bold">{{ "{:,}".format(data.domains) }}</span> registered .{{ data.tld }} domains.
                 {% endif %}
             </p>
 
@@ -110,7 +116,7 @@
                 
                     <a href="{{ url_for('tld_browse_page', tld=data.tld, slug='all') }}"
                     class="px-4 py-2 text-sm font-medium rounded-md {{ 'bg-white shadow text-gray-900' if kind == 'domains' else 'text-gray-600 hover:text-gray-900' }}"
-                >All</a>
+                >Total</a>
                 
                     <a href="{{ url_for('tld_browse_page', tld=data.tld, slug='new') }}"
                     class="px-4 py-2 text-sm font-medium rounded-md {{ 'bg-white shadow text-gray-900' if kind == 'new' else 'text-gray-600 hover:text-gray-900' }}"
