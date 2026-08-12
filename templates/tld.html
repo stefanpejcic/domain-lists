@@ -60,7 +60,7 @@
 
             <div class="rounded-xl border bg-white p-6 shadow-sm">
                 <div class="text-sm text-gray-500">
-                    Domains
+                    Registered domains
                 </div>
 
                 <div class="mt-2 text-3xl font-bold">
@@ -71,7 +71,7 @@
 
             <div class="rounded-xl border bg-white p-6 shadow-sm">
                 <div class="text-sm text-gray-500">
-                    New today
+                    Newly registered today
                 </div>
 
                 <div class="mt-2 text-3xl font-bold text-emerald-600">
@@ -105,26 +105,26 @@
                 API access can be added here later.
             </p>
 
-            <div class="mt-5 flex gap-3">
-
+<div class="mt-5 flex gap-3 items-center">
+    Download lists:
 <a href="{{ url_for('download_tld_list', tld=data.tld, kind='domains') }}"
     class="rounded-lg bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200"
 >
-    Download all
+    all .{{ data.tld }} domains
+    {% if sizes.domains %}<span class="ml-1 text-xs text-gray-400">({{ sizes.domains | filesizeformat }})</span>{% endif %}
 </a>
-
 <a href="{{ url_for('download_tld_list', tld=data.tld, kind='new') }}"
     class="rounded-lg bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200"
 >
-    Download new
+    .{{ data.tld }} domains registered today
+    {% if sizes.new %}<span class="ml-1 text-xs text-gray-400">({{ sizes.new | filesizeformat }})</span>{% endif %}
 </a>
-
-<a  href="{{ url_for('download_tld_list', tld=data.tld, kind='deleted') }}"
+<a href="{{ url_for('download_tld_list', tld=data.tld, kind='deleted') }}"
     class="rounded-lg bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200"
 >
-    Download deleted
+    .{{ data.tld }} domains deleted today
+    {% if sizes.deleted %}<span class="ml-1 text-xs text-gray-400">({{ sizes.deleted | filesizeformat }})</span>{% endif %}
 </a>
-
             </div>
 
         </div>
