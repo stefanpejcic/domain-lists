@@ -124,24 +124,43 @@ def sort_unique(raw_path, sorted_path, memory=SORT_MEMORY):
     )
 
 
-def read_domain_list_plain(path):
-    domains = set()
-    with open(path, "r", encoding="utf-8") as f:
-        for line in f:
-            d = line.strip()
-            if d:
-                domains.add(d)
-    return domains
+def gunzip_to_file(gz_path, out_path):
+    """
+    Decompress a gzip file to a plain text file on disk, streamed
+    in chunks - never holds the full content in memory.
+    """
+    with gzip.open(gz_path, "rt", encoding="utf-8", errors="replace") as fin, \
+            open(out_path, "w", encoding="utf-8") as fout:
+        while True:
+            chunk = fin.read(1024 * 1024 * 16)
+            if not chunk:
+                break
+            fout.write(chunk)
 
 
-def load_gz_domain_set(path):
-    domains = set()
-    with gzip.open(path, "rt", encoding="utf-8") as f:
-        for line in f:
-            d = line.strip().lower()
-            if d:
-                domains.add(d)
-    return domains
+def diff_sorted_files_on_disk(current_sorted_path, previous_sorted_path,
+                               new_out_path, deleted_out_path):
+    """
+    Compute new/deleted domains between two sorted files using
+    `comm`, entirely on disk - no domains held in RAM. Both inputs
+    must already be sorted, which they are: current_sorted_path
+    comes straight from sort_unique, and previous_sorted_path is a
+    decompressed previous snapshot that was itself written sorted.
+    """
+
+    with open(new_out_path, "w", encoding="utf-8") as out:
+        subprocess.run(
+            ["comm", "-23", str(current_sorted_path), str(previous_sorted_path)],
+            stdout=out,
+            check=True,
+        )
+
+    with open(deleted_out_path, "w", encoding="utf-8") as out:
+        subprocess.run(
+            ["comm", "-13", str(current_sorted_path), str(previous_sorted_path)],
+            stdout=out,
+            check=True,
+        )
 
 
 def gzip_file(src_path, dest_path, compresslevel=6):
@@ -157,16 +176,6 @@ def gzip_file(src_path, dest_path, compresslevel=6):
                 break
             fout.write(chunk)
     os.replace(tmp, dest_path)
-
-
-def write_domain_list(filename, domains):
-    filename = Path(filename)
-    filename.parent.mkdir(parents=True, exist_ok=True)
-    tmp = Path(str(filename) + ".tmp")
-    with gzip.open(tmp, "wt", encoding="utf-8", compresslevel=6) as f:
-        for domain in sorted(domains):
-            f.write(domain + "\n")
-    os.replace(tmp, filename)
 
 
 def count_lines(path):
@@ -252,8 +261,15 @@ def process_tld(tld, today, script_dir_str):
 
     work_dir = Path("/tmp") / f"zonefile_{tld}_{today}"
     work_dir.mkdir(parents=True, exist_ok=True)
+
+    # All temp paths declared up front so `finally` can always
+    # clean them up, even if an early step raises before a given
+    # path is otherwise referenced.
     raw_path = work_dir / "raw.txt"
     sorted_path = work_dir / "sorted.txt"
+    previous_sorted_path = work_dir / "previous_sorted.txt"
+    new_raw_path = work_dir / "new_raw.txt"
+    deleted_raw_path = work_dir / "deleted_raw.txt"
 
     try:
         try:
@@ -299,31 +315,41 @@ def process_tld(tld, today, script_dir_str):
         log(f"{tld}: Comparing with {previous_file}")
 
         try:
-            previous_domains = load_gz_domain_set(previous_file)
+            gunzip_to_file(previous_file, previous_sorted_path)
         except Exception as e:
             return {
                 "tld": tld,
                 "success": False,
-                "reason": f"Failed to read previous snapshot: {e}",
+                "reason": f"Failed to decompress previous snapshot: {e}",
             }
 
-        current_domains = read_domain_list_plain(sorted_path)
+        try:
+            diff_sorted_files_on_disk(
+                sorted_path, previous_sorted_path,
+                new_raw_path, deleted_raw_path,
+            )
+        except subprocess.CalledProcessError as e:
+            return {
+                "tld": tld,
+                "success": False,
+                "reason": f"comm diff failed: {e}",
+            }
 
-        new_domains = current_domains - previous_domains
-        deleted_domains = previous_domains - current_domains
+        new_count = count_lines(new_raw_path)
+        deleted_count = count_lines(deleted_raw_path)
 
         new_file = new_folder / f"{tld}.txt.gz"
-        write_domain_list(new_file, new_domains)
+        gzip_file(new_raw_path, new_file)
 
         deleted_file = deleted_folder / f"{tld}.txt.gz"
-        write_domain_list(deleted_file, deleted_domains)
+        gzip_file(deleted_raw_path, deleted_file)
 
         elapsed = time.time() - start_time
 
         log(
             f"{tld}: {domain_count:,} total, "
-            f"{len(new_domains):,} new, "
-            f"{len(deleted_domains):,} deleted, "
+            f"{new_count:,} new, "
+            f"{deleted_count:,} deleted, "
             f"{elapsed:.2f}s"
         )
 
@@ -331,14 +357,15 @@ def process_tld(tld, today, script_dir_str):
             "tld": tld,
             "success": True,
             "domains": domain_count,
-            "new": len(new_domains),
-            "deleted": len(deleted_domains),
+            "new": new_count,
+            "deleted": deleted_count,
             "first_snapshot": False,
             "elapsed": elapsed,
         }
 
     finally:
-        for p in (raw_path, sorted_path):
+        for p in (raw_path, sorted_path, previous_sorted_path,
+                  new_raw_path, deleted_raw_path):
             try:
                 p.unlink(missing_ok=True)
             except Exception:
@@ -509,7 +536,7 @@ def main():
 
     results = []
 
-    # Large files: one at a time, full machine available to `sort`.
+    # Large files: one at a time, full machine available to `sort`/`comm`.
     for tld in large_tlds:
         results.append(process_tld(tld, TODAY, str(SCRIPT_DIR)))
 
