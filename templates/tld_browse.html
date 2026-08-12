@@ -31,7 +31,7 @@
             </a>
 
                 <div class="text-right text-sm text-gray-500">
-                    Last updated <span class="font-medium text-gray-900">{{ data.last_updated }}</span> <span>{{ data.timezone }}</span>
+					Last update: <span class="font-medium text-gray-900">{{ data.last_updated }}</span>, next update in <span id="next-update" class="font-medium text-gray-900">calculating...</span>
                 </div>
          
 
@@ -328,7 +328,30 @@
 
     </main>
 </div>
-   
+
+<script>
+    const lastUpdated = new Date("{{ data.last_updated }}");
+    const nextUpdate = new Date(lastUpdated.getTime() + 24 * 60 * 60 * 1000);
+
+    function updateCountdown() {
+        const now = new Date();
+        let diff = nextUpdate - now;
+
+        if (diff <= 0) {
+            document.getElementById("next-update").textContent = "progress";
+            return;
+        }
+
+        // Calculate hours remaining (rounded up so "0h 45m" displays as "1h")
+        const hours = Math.ceil(diff / (1000 * 60 * 60));
+
+		document.getElementById("next-update").textContent = 
+            `${hours} ${hours === 1 ? 'hour' : 'hours'}`;
+    }
+
+    updateCountdown();
+    setInterval(updateCountdown, 60000);
+</script>
 
 </body>
 </html>
