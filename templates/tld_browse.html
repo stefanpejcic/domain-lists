@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>.{{ data.tld }} {{ 'newly registered' if kind == 'new' else ('deleted' if kind == 'deleted' else 'all') }} domains — Domain Zone Data</title>
+
+    <script
+        defer
+        src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"
+    ></script>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body class="bg-gray-50 text-gray-900">
+
+<div class="min-h-screen">
+
+    <header class="border-b bg-white">
+        <div class="mx-auto max-w-7xl px-6 py-5">
+            
+              <a href="{{ url_for('tld_detail', tld=data.tld) }}"
+                class="text-sm text-gray-500 hover:text-gray-900"
+            >
+                ← .{{ data.tld }} overview
+            </a>
+        </div>
+    </header>
+
+    <main
+        class="md:pt-10 px-4 mx-auto max-w-7xl md:px-6 lg:px-8 pb-8"
+        x-data="{
+            domains: [],
+            search: '',
+            kind: '{{ kind }}',
+            page: 1,
+            hasMore: false,
+            loading: false,
+            matchedCount: 0,
+
+            init() {
+                this.load();
+            },
+
+            load() {
+                this.loading = true;
+                const params = new URLSearchParams({
+                    kind: this.kind,
+                    search: this.search,
+                    page: this.page,
+                });
+                fetch('/tld/{{ data.tld }}/browse?' + params.toString())
+                    .then(r => r.json())
+                    .then(data => {
+                        this.domains = data.domains;
+                        this.hasMore = data.has_more;
+                        this.loading = false;
+                    });
+            },
+
+            switchKind(slug, k) {
+                window.location.href = '/tld/{{ data.tld }}/' + slug;
+            },
+
+            doSearch() {
+                this.page = 1;
+                this.load();
+            },
+
+            nextPage() {
+                if (!this.hasMore) return;
+                this.page += 1;
+                this.load();
+            },
+
+            prevPage() {
+                if (this.page <= 1) return;
+                this.page -= 1;
+                this.load();
+            }
+        }"
+    >
+
+        <div class="max-w-2xl mx-auto text-center mb-10">
+            <h1 class="mx-auto text-3xl font-bold text-gray-900 sm:text-4xl sm:leading-none sm:tracking-tight">
+                {% if kind == 'new' %}
+                Newly registered .{{ data.tld }} domains
+                {% elif kind == 'deleted' %}
+                Deleted .{{ data.tld }} domains
+                {% else %}
+                All .{{ data.tld }} domains
+                {% endif %}
+            </h1>
+            <p class="mt-2 text-xl text-gray-600">
+                {% if kind == 'new' %}
+                Domains newly registered in the last 24h.
+                {% elif kind == 'deleted' %}
+                Domains deleted in the last 24h.
+                {% else %}
+                Full list of registered .{{ data.tld }} domains.
+                {% endif %}
+            </p>
+
+            <div class="inline-flex mt-6 p-1 bg-gray-200 rounded-lg">
+                
+                    <a href="{{ url_for('tld_browse_page', tld=data.tld, slug='all') }}"
+                    class="px-4 py-2 text-sm font-medium rounded-md {{ 'bg-white shadow text-gray-900' if kind == 'domains' else 'text-gray-600 hover:text-gray-900' }}"
+                >All</a>
+                
+                    <a href="{{ url_for('tld_browse_page', tld=data.tld, slug='new') }}"
+                    class="px-4 py-2 text-sm font-medium rounded-md {{ 'bg-white shadow text-gray-900' if kind == 'new' else 'text-gray-600 hover:text-gray-900' }}"
+                >New</a>
+                
+                    <a href="{{ url_for('tld_browse_page', tld=data.tld, slug='deleted') }}"
+                    class="px-4 py-2 text-sm font-medium rounded-md {{ 'bg-white shadow text-gray-900' if kind == 'deleted' else 'text-gray-600 hover:text-gray-900' }}"
+                >Deleted</a>
+            </div>
+        </div>
+
+        <div class="relative p-6 pt-8 border border-gray-200 rounded-lg shadow-sm bg-gray-50/50">
+            <div class="absolute left-0 right-0 flex items-center justify-center -top-4">
+                <div class="flex items-center justify-center w-10 h-10 p-2 bg-white border border-gray-200 rounded-full">
+                    <svg class="w-full h-full" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244"></path>
+                    </svg>
+                </div>
+            </div>
+
+            <div class="flex gap-2 justify-between mb-4 items-center flex-wrap">
+                <p class="leading-relaxed text-gray-700">
+                    <span x-show="!loading" x-text="'Showing up to ' + domains.length + ' domains (page ' + page + ')'"></span>
+                    <span x-show="loading">Loading...</span>
+                </p>
+
+                <div class="flex gap-3 items-center">
+                    <input
+                        x-model="search"
+                        @keyup.enter="doSearch()"
+                        type="search"
+                        placeholder="Search domain..."
+                        class="w-48 rounded-lg border px-3 py-2 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
+                    >
+                    <button
+                        @click="doSearch()"
+                        class="rounded-lg bg-gray-100 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200"
+                    >
+                        Search
+                    </button>
+
+                    <a href="{{ url_for('download_tld_list', tld=data.tld, kind=kind) }}"
+                        class="flex gap-2 items-center px-3 py-2 text-sm font-semibold text-white transition-colors bg-gray-800 rounded-lg hover:bg-gray-900"
+                    >
+                        Download list
+                        {% set size_key = 'domains' if kind == 'domains' else kind %}
+                        {% if sizes[size_key] %}<span class="opacity-75">({{ sizes[size_key] | filesizeformat }})</span>{% endif %}
+                    </a>
+                </div>
+            </div>
+
+            <template x-if="!loading && domains.length === 0">
+                <p class="text-sm text-gray-400">No domains found.</p>
+            </template>
+
+            <div
+                class="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4"
+                x-show="!loading && domains.length > 0"
+            >
+                <template x-for="domain in domains" :key="domain">
+                    <div
+                        class="block p-3 bg-white border border-gray-200 rounded font-mono text-sm text-gray-800 truncate"
+                        x-text="domain"
+                        :title="domain"
+                    ></div>
+                </template>
+            </div>
+
+            <div class="flex items-center justify-between mt-6 pt-4 border-t text-sm text-gray-500">
+                <div x-text="'Page ' + page"></div>
+                <div class="flex gap-2">
+                    <button
+                        @click="prevPage()"
+                        :disabled="page <= 1"
+                        :class="page <= 1 ? 'opacity-40 cursor-not-allowed' : 'hover:bg-gray-100'"
+                        class="rounded-lg border px-3 py-1.5 font-medium bg-white"
+                    >
+                        ← Prev
+                    </button>
+                    <button
+                        @click="nextPage()"
+                        :disabled="!hasMore"
+                        :class="!hasMore ? 'opacity-40 cursor-not-allowed' : 'hover:bg-gray-100'"
+                        class="rounded-lg border px-3 py-1.5 font-medium bg-white"
+                    >
+                        Next →
+                    </button>
+                </div>
+            </div>
+
+        </div>
+    </main>
+</div>
+
+</body>
+</html>
