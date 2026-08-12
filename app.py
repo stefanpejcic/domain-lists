@@ -202,7 +202,7 @@ def tld_browse_page(tld, slug):
     return render_template(
         "tld_browse.html",
         data=data,
-        inf=info,
+        info=info,
         sizes=sizes,
         kind=kind,
         slug=slug,
