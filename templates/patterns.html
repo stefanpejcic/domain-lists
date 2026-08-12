@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>Domain Pattern Availability — Domain Zone Data</title>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Alpine.js -->
+    <script
+        defer
+        src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"
+    ></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: "#f0f9ff",
+                            100: "#e0f2fe",
+                            500: "#0ea5e9",
+                            600: "#0284c7",
+                            700: "#0369a1"
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+
+<body class="bg-gray-50 text-gray-900">
+
+<script id="patterns-data" type="application/json">
+{{ tlds | tojson }}
+</script>
+
+<script id="pattern-definitions" type="application/json">
+{{ patterns | tojson }}
+</script>
+
+<div class="min-h-screen">
+
+    <!-- Header -->
+    <header class="border-b bg-white">
+        <div class="mx-auto max-w-7xl px-6 py-5 flex items-center justify-between">
+
+            <a
+                href="{{ url_for('index') }}"
+                class="text-sm hover:text-gray-500 text-gray-900"
+            >
+                ↯ Domains lists
+            </a>
+
+            <div class="text-right text-sm text-gray-500">
+                {% if data.last_updated %}
+                    Last update:
+                    <span class="font-medium text-gray-900">
+                        {{ data.last_updated }}
+                    </span>,
+                    next update in
+                    <span
+                        id="next-update"
+                        class="font-medium text-gray-900"
+                    >
+                        calculating...
+                    </span>
+                {% endif %}
+            </div>
+
+        </div>
+    </header>
+
+
+    <!-- Main -->
+    <main class="mx-auto max-w-7xl px-6 py-8">
+
+        <!-- Heading -->
+        <div class="max-w-3xl mx-auto text-center mb-10">
+
+            <h1 class="text-3xl font-bold text-gray-900 sm:text-4xl">
+                Unregistered Domain Statistics
+            </h1>
+
+            <p class="mt-3 text-xl text-gray-600">
+                See how many short domain names are still available
+                across
+                <span class="font-bold text-2xl text-gray-900">
+                    {{ "{:,}".format(tlds|length) }}
+                </span>
+                zones.
+            </p>
+
+            <p class="mt-3 text-sm text-gray-500">
+                Availability is calculated from the latest daily zone files.
+            </p>
+
+        </div>
+
+
+        <!-- Availability table -->
+        <div
+            class="mt-8"
+            x-data="{
+                items: [],
+                search: '',
+                sort: 'tld',
+                direction: 'asc',
+
+                init() {
+                    this.items = Object.entries(
+                        JSON.parse(
+                            document.getElementById('patterns-data').textContent
+                        )
+                    ).map(([tld, data]) => ({
+                        tld: tld,
+                        ...data
+                    }));
+                },
+
+                matches(item) {
+                    return item.tld
+                        .toLowerCase()
+                        .includes(this.search.toLowerCase());
+                },
+
+                value(item, pattern) {
+                    return Number(
+                        item.patterns?.[pattern]?.available
+                    ) || 0;
+                },
+
+                sortBy(column) {
+                    if (this.sort === column) {
+                        this.direction =
+                            this.direction === 'asc'
+                                ? 'desc'
+                                : 'asc';
+                    } else {
+                        this.sort = column;
+                        this.direction =
+                            column === 'tld'
+                                ? 'asc'
+                                : 'desc';
+                    }
+                },
+
+                sorted() {
+                    return this.items
+                        .filter(item => this.matches(item))
+                        .sort((a, b) => {
+
+                            if (this.sort === 'tld') {
+                                const result =
+                                    a.tld.localeCompare(b.tld);
+
+                                return this.direction === 'asc'
+                                    ? result
+                                    : -result;
+                            }
+
+                            const aValue =
+                                this.value(a, this.sort);
+
+                            const bValue =
+                                this.value(b, this.sort);
+
+                            return this.direction === 'asc'
+                                ? aValue - bValue
+                                : bValue - aValue;
+                        });
+                },
+
+                arrow(column) {
+                    if (this.sort !== column) {
+                        return '';
+                    }
+
+                    return this.direction === 'asc'
+                        ? '↑'
+                        : '↓';
+                }
+            }"
+        >
+
+            <div class="relative pt-8 border border-gray-200 rounded-lg shadow-sm bg-white">
+
+                <!-- Floating icon -->
+                <div class="absolute left-0 right-0 flex items-center justify-center -top-4">
+
+                    <div class="flex items-center justify-center w-10 h-10 p-2 bg-white border border-gray-200 rounded-full">
+
+                        <svg
+                            class="w-full h-full"
+                            xmlns="http://www.w3.org/2000/svg"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke-width="1.5"
+                            stroke="currentColor"
+                        >
+                            <path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                d="M9 12.75 11.25 15 15 9.75m-3-7.5A9 9 0 1 0 21 11.25"
+                            />
+                        </svg>
+
+                    </div>
+
+                </div>
+
+
+                <!-- Table header -->
+                <div class="border-b px-5 pb-4">
+
+                    <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+
+                        <div>
+
+                            <h2 class="text-lg font-semibold">
+                                Available Domain Patterns
+                            </h2>
+
+                            <p class="mt-1 text-sm text-gray-500">
+                                Number of available short domains by TLD.
+                            </p>
+
+                        </div>
+
+                        <!-- Search -->
+                        <input
+                            x-model="search"
+                            type="search"
+                            placeholder="Search TLD..."
+                            class="w-48 rounded-lg border px-3 py-2 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
+                        >
+
+                    </div>
+
+                </div>
+
+
+                <!-- Table -->
+                <div class="overflow-x-auto">
+
+                    <table class="w-full text-left text-sm border-collapse">
+
+                        <thead class="sticky top-0 z-10 bg-gray-50 text-xs uppercase text-gray-500 shadow-sm">
+
+                            <tr>
+
+                                <!-- TLD -->
+
+                                <th
+                                    class="cursor-pointer select-none px-5 py-3 hover:bg-gray-100"
+                                    @click="sortBy('tld')"
+                                >
+                                    <div class="flex items-center gap-1">
+                                        TLD
+                                        <span x-text="arrow('tld')"></span>
+                                    </div>
+                                </th>
+
+
+                                <!-- Patterns -->
+
+                                {% for key, pattern in patterns.items() %}
+
+                                <th
+                                    class="cursor-pointer select-none px-5 py-3 text-right hover:bg-gray-100"
+                                    @click="sortBy('{{ key }}')"
+                                >
+                                    <div class="flex items-center justify-end gap-1">
+
+                                        <span>
+                                            {{ key }}
+                                        </span>
+
+                                        <span x-text="arrow('{{ key }}')"></span>
+
+                                    </div>
+                                </th>
+
+                                {% endfor %}
+
+                            </tr>
+
+                        </thead>
+
+
+                        <tbody class="divide-y bg-white">
+
+                            <template
+                                x-for="item in sorted()"
+                                :key="item.tld"
+                            >
+
+                                <tr class="hover:bg-gray-50">
+
+                                    <!-- TLD -->
+
+                                    <td class="px-5 py-4">
+
+                                        <a
+                                            :href="'/tld/' + item.tld + '/all'"
+                                            class="font-semibold text-sky-600 hover:text-sky-800"
+                                            x-text="'.' + item.tld"
+                                        ></a>
+
+                                    </td>
+
+
+                                    <!-- Pattern values -->
+
+                                    {% for key, pattern in patterns.items() %}
+
+                                    <td class="px-5 py-4 text-right">
+
+                                        <span
+                                            class="font-medium"
+                                            :class="
+                                                value(item, '{{ key }}') > 0
+                                                    ? 'text-emerald-600'
+                                                    : 'text-gray-400'
+                                            "
+                                            x-text="
+                                                value(item, '{{ key }}').toLocaleString()
+                                            "
+                                        ></span>
+
+                                    </td>
+
+                                    {% endfor %}
+
+                                </tr>
+
+                            </template>
+
+                        </tbody>
+
+                    </table>
+
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <!-- Pattern explanation -->
+        <div class="mb-8 rounded-xl border bg-white p-6 shadow-sm">
+
+            <h2 class="text-lg font-semibold text-gray-900">
+                Domain Patterns
+            </h2>
+
+            <p class="mt-2 text-sm text-gray-500">
+                Available counts represent the theoretical combinations
+                that are not currently present in the zone.
+            </p>
+
+            <div class="mt-5 overflow-x-auto">
+
+                <table class="w-full text-left text-sm">
+
+                    <thead class="border-b bg-gray-50 text-xs uppercase text-gray-500">
+                        <tr>
+                            <th class="px-5 py-3">
+                                Label
+                            </th>
+
+                            <th class="px-5 py-3">
+                                Category
+                            </th>
+
+                            <th class="px-5 py-3 text-right">
+                                Character Count
+                            </th>
+
+                            <th class="px-5 py-3 text-right">
+                                Total Domains
+                            </th>
+                        </tr>
+                    </thead>
+
+                    <tbody class="divide-y">
+
+                        {% for key, pattern in patterns.items() %}
+
+                        <tr class="hover:bg-gray-50">
+
+                            <td class="px-5 py-3 font-semibold">
+                                {{ key }}
+                            </td>
+
+                            <td class="px-5 py-3 text-gray-600">
+                                {{ pattern.category }}
+                            </td>
+
+                            <td class="px-5 py-3 text-right">
+                                {{ pattern.character_count }}
+                            </td>
+
+                            <td class="px-5 py-3 text-right font-medium">
+                                {{ "{:,}".format(pattern.maximum) }}
+                            </td>
+
+                        </tr>
+
+                        {% endfor %}
+
+                    </tbody>
+
+                </table>
+
+            </div>
+
+        </div>
+
+
+        <!-- Explanation -->
+        <div class="mt-8 rounded-xl border bg-white p-6 shadow-sm">
+
+            <h2 class="text-lg font-semibold text-gray-900">
+                How availability is calculated
+            </h2>
+
+            <p class="mt-2 text-sm leading-6 text-gray-500">
+                Each pattern has a fixed number of possible combinations.
+                We compare those combinations with the domains currently
+                present in the latest zone file for each TLD.
+            </p>
+
+            <div class="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-3">
+
+                <div class="rounded-lg bg-gray-50 p-4">
+
+                    <div class="text-sm font-medium text-gray-500">
+                        LLL
+                    </div>
+
+                    <div class="mt-1 text-2xl font-bold text-gray-900">
+                        17,576
+                    </div>
+
+                    <div class="mt-1 text-xs text-gray-500">
+                        26 × 26 × 26
+                    </div>
+
+                </div>
+
+
+                <div class="rounded-lg bg-gray-50 p-4">
+
+                    <div class="text-sm font-medium text-gray-500">
+                        NNN
+                    </div>
+
+                    <div class="mt-1 text-2xl font-bold text-gray-900">
+                        1,000
+                    </div>
+
+                    <div class="mt-1 text-xs text-gray-500">
+                        10 × 10 × 10
+                    </div>
+
+                </div>
+
+
+                <div class="rounded-lg bg-gray-50 p-4">
+
+                    <div class="text-sm font-medium text-gray-500">
+                        CCC
+                    </div>
+
+                    <div class="mt-1 text-2xl font-bold text-gray-900">
+                        46,656
+                    </div>
+
+                    <div class="mt-1 text-xs text-gray-500">
+                        36 × 36 × 36
+                    </div>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </main>
+
+
+    <!-- Footer -->
+
+    <footer class="border-t bg-white">
+
+        <div class="mx-auto max-w-7xl px-6 py-6">
+
+            <div class="flex flex-col gap-2 text-sm text-gray-500 sm:flex-row sm:justify-between">
+
+                <div>
+                    Domain Zone Data
+                </div>
+
+                <div>
+                    Updated {{ data.last_updated }}
+                    · {{ data.timezone }}
+                </div>
+
+            </div>
+
+        </div>
+
+    </footer>
+
+</div>
+
+
+<script>
+    const lastUpdated = new Date("{{ data.last_updated }}");
+    const nextUpdate =
+        new Date(lastUpdated.getTime() + 24 * 60 * 60 * 1000);
+
+    function updateCountdown() {
+
+        const now = new Date();
+        let diff = nextUpdate - now;
+
+        if (diff <= 0) {
+            document.getElementById("next-update").textContent =
+                "progress";
+            return;
+        }
+
+        const hours = Math.ceil(
+            diff / (1000 * 60 * 60)
+        );
+
+        document.getElementById("next-update").textContent =
+            `${hours} ${hours === 1 ? 'hour' : 'hours'}`;
+    }
+
+    updateCountdown();
+
+    setInterval(updateCountdown, 60000);
+</script>
+
+</body>
+</html>
