@@ -9,6 +9,12 @@
 
     <title>.{{ data.tld }} — Domain Zone Data</title>
 
+<script
+    defer
+    src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"
+></script>
+
+    
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
 
@@ -244,6 +250,159 @@
 
 
 
+<div
+            class="mt-8"
+            x-data="{
+                domains: [],
+                search: '',
+                kind: 'domains',
+                page: 1,
+                hasMore: false,
+                loading: false,
+
+                init() {
+                    this.load();
+                },
+
+                load() {
+                    this.loading = true;
+                    const params = new URLSearchParams({
+                        kind: this.kind,
+                        search: this.search,
+                        page: this.page,
+                    });
+                    fetch('/tld/{{ data.tld }}/browse?' + params.toString())
+                        .then(r => r.json())
+                        .then(data => {
+                            this.domains = data.domains;
+                            this.hasMore = data.has_more;
+                            this.loading = false;
+                        });
+                },
+
+                setKind(k) {
+                    this.kind = k;
+                    this.page = 1;
+                    this.load();
+                },
+
+                doSearch() {
+                    this.page = 1;
+                    this.load();
+                },
+
+                nextPage() {
+                    if (!this.hasMore) return;
+                    this.page += 1;
+                    this.load();
+                },
+
+                prevPage() {
+                    if (this.page <= 1) return;
+                    this.page -= 1;
+                    this.load();
+                }
+            }"
+        >
+            <div class="rounded-xl border bg-white shadow-sm">
+
+                <div class="border-b p-5">
+                    <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                        <div>
+                            <h2 class="text-lg font-semibold">
+                                Browse Domains
+                            </h2>
+                            <p class="mt-1 text-sm text-gray-500">
+                                Showing up to {{ 100 }} at a time
+                            </p>
+                        </div>
+
+                        <div class="flex flex-wrap gap-3">
+                            <div class="flex rounded-lg border overflow-hidden text-sm">
+                                <button
+                                    @click="setKind('domains')"
+                                    :class="kind === 'domains' ? 'bg-gray-800 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'"
+                                    class="px-3 py-2 font-medium"
+                                >All</button>
+                                <button
+                                    @click="setKind('new')"
+                                    :class="kind === 'new' ? 'bg-emerald-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'"
+                                    class="px-3 py-2 font-medium border-l"
+                                >New</button>
+                                <button
+                                    @click="setKind('deleted')"
+                                    :class="kind === 'deleted' ? 'bg-red-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'"
+                                    class="px-3 py-2 font-medium border-l"
+                                >Deleted</button>
+                            </div>
+
+                            <input
+                                x-model="search"
+                                @keyup.enter="doSearch()"
+                                type="search"
+                                placeholder="Search domain..."
+                                class="w-48 rounded-lg border px-3 py-2 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
+                            >
+
+                            <button
+                                @click="doSearch()"
+                                class="rounded-lg bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200"
+                            >
+                                Search
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-sm">
+                        <thead class="bg-gray-50 text-xs uppercase text-gray-500">
+                            <tr>
+                                <th class="px-5 py-3">Domain</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y">
+                            <template x-if="loading">
+                                <tr><td class="px-5 py-4 text-gray-400">Loading...</td></tr>
+                            </template>
+                            <template x-if="!loading && domains.length === 0">
+                                <tr><td class="px-5 py-4 text-gray-400">No domains found.</td></tr>
+                            </template>
+                            <template x-for="domain in domains" :key="domain">
+                                <tr class="hover:bg-gray-50">
+                                    <td class="px-5 py-3 font-mono text-gray-800" x-text="domain"></td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="flex items-center justify-between border-t p-4 text-sm text-gray-500">
+                    <div x-text="'Page ' + page"></div>
+                    <div class="flex gap-2">
+                        <button
+                            @click="prevPage()"
+                            :disabled="page <= 1"
+                            :class="page <= 1 ? 'opacity-40 cursor-not-allowed' : 'hover:bg-gray-100'"
+                            class="rounded-lg border px-3 py-1.5 font-medium"
+                        >
+                            ← Prev
+                        </button>
+                        <button
+                            @click="nextPage()"
+                            :disabled="!hasMore"
+                            :class="!hasMore ? 'opacity-40 cursor-not-allowed' : 'hover:bg-gray-100'"
+                            class="rounded-lg border px-3 py-1.5 font-medium"
+                        >
+                            Next →
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        
 
 
         
