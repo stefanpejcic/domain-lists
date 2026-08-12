@@ -80,73 +80,83 @@
     <!-- Main -->
     <main class="mx-auto max-w-7xl px-6 py-8">
 
-        <!-- Statistics -->
-        <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-
-            <!-- TLDs -->
-            <div class="rounded-xl border bg-white p-6 shadow-sm">
-                <div class="text-sm font-medium text-gray-500">
-                    Monitored TLDs
-                </div>
-
-                <div class="mt-2 text-3xl font-bold">
-                    {{ "{:,}".format(summary.tlds) }}
-                </div>
-
-                <div class="mt-2 text-xs text-gray-400">
-                    Active zone files
-                </div>
-            </div>
 
 
-            <!-- Domains -->
-            <div class="rounded-xl border bg-white p-6 shadow-sm">
-                <div class="text-sm font-medium text-gray-500">
-                    Total Registered Domains
-                </div>
+<div 
+    class="max-w-3xl mx-auto text-center mb-10" 
+    x-data="{ 
+        kind: 'domains',
+        summary: {
+            domains: '{{ "{:,}".format(summary.domains) }}',
+            new: '{{ "{:,}".format(summary.new) }}',
+            deleted: '{{ "{:,}".format(summary.deleted) }}',
+            tlds: '{{ "{:,}".format(summary.tlds) }}'
+        }
+    }"
+>
+    <!-- Heading (Defaults to Domains) -->
+    <h1 class="mx-auto text-3xl font-bold text-gray-900 sm:text-4xl sm:leading-none sm:tracking-tight">
+        <span x-show="kind === 'domains'">List of all registered domains in all zones</span>
+        <template x-if="kind === 'new'"><span>List of newly registered domains in all zones</span></template>
+        <template x-if="kind === 'deleted'"><span>List of deleted domains in all zones</span></template>
+    </h1>
 
-                <div class="mt-2 text-3xl font-bold">
-                    {{ "{:,}".format(summary.domains) }}
-                </div>
+    <!-- Subtitle (Defaults to Domains) -->
+    <p class="mt-2 text-xl text-gray-600">
+        <span x-show="kind === 'domains'">
+            Download a list of <span class="font-bold text-2xl text-gray-900">{{ "{:,}".format(summary.domains) }}</span> domains in <span class="font-bold text-2xl text-gray-900">{{ "{:,}".format(summary.tlds) }}</span> zones.
+        </span>
+        <template x-if="kind === 'new'">
+            <span>
+                Download a list of <span class="font-bold text-2xl text-emerald-600" x-text="summary.new"></span> domains registered today.
+            </span>
+        </template>
+        <template x-if="kind === 'deleted'">
+            <span>
+                Download a list of <span class="font-bold text-2xl text-red-600" x-text="summary.deleted"></span> domains deleted today.
+            </span>
+        </template>
+    </p>
 
-                <div class="mt-2 text-xs text-gray-400">
-                    Across all zones
-                </div>
-            </div>
+    <!-- Buttons -->
+    <div class="inline-flex mt-6 p-1 bg-gray-200 rounded-lg">
+        <button 
+            type="button"
+            @click="kind = 'domains'"
+            :class="{
+                'bg-white shadow text-gray-900': kind === 'domains',
+                'text-gray-600 hover:text-gray-900': kind !== 'domains'
+            }"
+            class="px-4 py-2 text-sm font-medium rounded-md transition-colors"
+        >
+            Total
+        </button>
 
+        <button 
+            type="button"
+            @click="kind = 'new'"
+            :class="{
+                'bg-white shadow text-gray-900': kind === 'new',
+                'text-gray-600 hover:text-gray-900': kind !== 'new'
+            }"
+            class="px-4 py-2 text-sm font-medium rounded-md transition-colors"
+        >
+            New
+        </button>
 
-            <!-- New -->
-            <div class="rounded-xl border bg-white p-6 shadow-sm">
-                <div class="text-sm font-medium text-gray-500">
-                    Newly registered today
-                </div>
-
-                <div class="mt-2 text-3xl font-bold text-emerald-600">
-                    +{{ "{:,}".format(summary.new) }}
-                </div>
-
-                <div class="mt-2 text-xs text-gray-400">
-                    Compared with previous snapshot
-                </div>
-            </div>
-
-
-            <!-- Deleted -->
-            <div class="rounded-xl border bg-white p-6 shadow-sm">
-                <div class="text-sm font-medium text-gray-500">
-                    Deleted today
-                </div>
-
-                <div class="mt-2 text-3xl font-bold text-red-600">
-                    -{{ "{:,}".format(summary.deleted) }}
-                </div>
-
-                <div class="mt-2 text-xs text-gray-400">
-                    Compared with previous snapshot
-                </div>
-            </div>
-
-        </div>
+        <button 
+            type="button"
+            @click="kind = 'deleted'"
+            :class="{
+                'bg-white shadow text-gray-900': kind === 'deleted',
+                'text-gray-600 hover:text-gray-900': kind !== 'deleted'
+            }"
+            class="px-4 py-2 text-sm font-medium rounded-md transition-colors"
+        >
+            Deleted
+        </button>
+    </div>
+</div>
 
 
 
