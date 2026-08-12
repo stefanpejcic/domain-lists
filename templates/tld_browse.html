@@ -57,6 +57,13 @@
                     });
             },
 
+            switchKind(newKind) {
+                if (this.kind === newKind) return;
+                this.kind = newKind;
+                this.page = 1;
+                this.load();
+            },
+
             doSearch() {
                 this.page = 1;
                 this.load();
@@ -105,12 +112,12 @@
                 </template>
             </p>
 
-            <!-- Download Tabs (Interactive Hover & Direct Download on Click) -->
+            <!-- Download Tabs (Hover updates domains list, Click triggers direct download) -->
             <div class="inline-flex mt-6 p-1 bg-gray-200 rounded-lg">
                 <!-- Total / All Domains -->
                 <a 
                     href="{{ url_for('download_tld_list', tld=data.tld, kind='domains') }}"
-                    @mouseenter="kind = 'domains'"
+                    @mouseenter="switchKind('domains')"
                     :class="{
                         'bg-white shadow text-gray-900': kind === 'domains' || kind === 'all',
                         'text-gray-600 hover:text-gray-900': kind !== 'domains' && kind !== 'all'
@@ -127,7 +134,7 @@
                 <!-- New Domains -->
                 <a 
                     href="{{ url_for('download_tld_list', tld=data.tld, kind='new') }}"
-                    @mouseenter="kind = 'new'"
+                    @mouseenter="switchKind('new')"
                     :class="{
                         'bg-white shadow text-gray-900': kind === 'new',
                         'text-gray-600 hover:text-gray-900': kind !== 'new'
@@ -144,7 +151,7 @@
                 <!-- Deleted Domains -->
                 <a 
                     href="{{ url_for('download_tld_list', tld=data.tld, kind='deleted') }}"
-                    @mouseenter="kind = 'deleted'"
+                    @mouseenter="switchKind('deleted')"
                     :class="{
                         'bg-white shadow text-gray-900': kind === 'deleted',
                         'text-gray-600 hover:text-gray-900': kind !== 'deleted'
@@ -171,7 +178,7 @@
 
             <div class="flex gap-2 justify-between mb-4 items-center flex-wrap">
                 <p class="leading-relaxed text-gray-700">
-                    <span x-show="!loading" x-text="'Showing up to ' + domains.length + ' domains (page ' + page + ')'"></span>
+                    <span x-show="!loading" x-text="'Showing up to ' + domains.length + ' ' + (kind === 'deleted' ? 'deleted ' : (kind === 'new' ? 'newly registered ' : '')) + 'domains (page ' + page + ')'"></span>
                     <span x-show="loading">Loading...</span>
                 </p>
 
@@ -189,14 +196,6 @@
                     >
                         Search
                     </button>
-
-                    <a :href="'/download/' + '{{ data.tld }}' + '/' + (kind === 'all' ? 'domains' : kind)"
-                        class="flex gap-2 items-center px-3 py-2 text-sm font-semibold text-white transition-colors bg-gray-800 rounded-lg hover:bg-gray-900"
-                    >
-                        Download list
-                        {% set size_key = 'domains' if kind == 'domains' else kind %}
-                        {% if sizes[size_key] %}<span class="opacity-75">({{ sizes[size_key] | filesizeformat }})</span>{% endif %}
-                    </a>
                 </div>
             </div>
 
