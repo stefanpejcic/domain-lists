@@ -20,6 +20,16 @@ KIND_LABELS = {
     "deleted": "Deleted",
 }
 
+VALID_PATTERNS = {
+    "one-letter": "One Letter",
+    "2-letters": "2 Letters",
+    "3-letters": "3 Letters",
+    "4-letters": "4 Letters",
+    "one-number": "One Number",
+    "two-numbers": "Two Numbers (NN)",
+    "one-word": "One Word",
+}
+
 
 # ==============================================================
 # Helpers
@@ -51,7 +61,7 @@ def load_tlds():
         return tlds
 
     for folder in JSON_FOLDER.iterdir():
-        if not folder.is_dir():
+        if not folder.is_dir() or folder.name in ("short_patterns", "2letter"):
             continue
 
         latest_file = folder / "latest"
@@ -69,6 +79,34 @@ def load_tlds():
         tlds.append(data)
 
     return sorted(tlds, key=lambda x: x.get("tld", ""))
+
+
+def latest_date_with_pattern(pattern_type=None):
+    """
+    Find the most recent date folder that contains the pattern file,
+    or general deleted short_patterns data.
+    """
+    if not LISTS_FOLDER.exists():
+        return None
+
+    dates = []
+    for date_folder in LISTS_FOLDER.iterdir():
+        if not date_folder.is_dir():
+            continue
+
+        if pattern_type:
+            file_path = date_folder / pattern_type / "deleted.txt.gz"
+            if file_path.exists():
+                dates.append(date_folder.name)
+        else:
+            # Check if short_patterns json exists for this date
+            if (JSON_FOLDER / "short_patterns" / f"{date_folder.name}.json").exists():
+                dates.append(date_folder.name)
+
+    if not dates:
+        return None
+
+    return sorted(dates, reverse=True)[0]
 
 
 def latest_date_with_domains(tld):
@@ -104,13 +142,11 @@ def get_download_sizes(tld):
     return sizes
 
 
-def browse_domains(tld, date, kind, search, page):
+def browse_domains_from_path(path, search, page):
     """
-    Stream a sorted domains.txt.gz, optionally filter by substring,
-    and return one page of up to DOMAINS_PER_PAGE results plus
-    whether more results exist. Never loads the full file into memory.
+    Stream a sorted gzip file, optionally filter by substring,
+    and return one page of results.
     """
-    path = LISTS_FOLDER / date / kind / f"{tld}.txt.gz"
     if not path.exists():
         return [], False, 0
 
@@ -139,6 +175,11 @@ def browse_domains(tld, date, kind, search, page):
                 break
 
     return results, has_more, matched_count
+
+
+def browse_domains(tld, date, kind, search, page):
+    path = LISTS_FOLDER / date / kind / f"{tld}.txt.gz"
+    return browse_domains_from_path(path, search, page)
 
 
 def validate_tld(tld):
@@ -176,6 +217,123 @@ def index():
 
 
 # ==============================================================
+# Deleted Short Pattern Routes
+# ==============================================================
+@app.route("/deleted", defaults={"pattern_type": None})
+@app.route("/deleted/<pattern_type>")
+def deleted(pattern_type):
+    if pattern_type:
+        pattern_type = pattern_type.lower().strip()
+
+        if pattern_type not in VALID_PATTERNS:
+            abort(404)
+
+        date = latest_date_with_pattern(pattern_type)
+        if not date:
+            abort(404)
+
+        summary_data = load_json(
+            JSON_FOLDER / "short_patterns" / f"{date}.json"
+        ) or {}
+
+        counts = summary_data.get("patterns", {})
+
+        file_path = (
+            LISTS_FOLDER
+            / date
+            / pattern_type
+            / "deleted.txt.gz"
+        )
+
+        file_size = file_path.stat().st_size if file_path.exists() else 0
+
+        return render_template(
+            "deleted_browse.html",
+            pattern_type=pattern_type,
+            pattern_label=VALID_PATTERNS[pattern_type],
+            count=counts.get(pattern_type, 0),
+            date=date,
+            file_size=file_size,
+            patterns=VALID_PATTERNS,
+        )
+
+    date = latest_date_with_pattern()
+
+    if not date:
+        return jsonify({
+            "error": "No pattern statistics found",
+            "patterns": {}
+        }), 404
+
+    json_path = JSON_FOLDER / "short_patterns" / f"{date}.json"
+    data = load_json(json_path)
+
+    if not data:
+        return jsonify({
+            "error": "JSON file missing",
+            "patterns": {}
+        }), 404
+
+    return render_template(
+        "deleted_browse.html",
+        patterns=VALID_PATTERNS,
+        data=data,
+    )
+
+
+@app.route("/deleted/<pattern_type>/browse")
+def browse_deleted_pattern(pattern_type):
+    """API endpoint for paginated AJAX results for deleted domain patterns."""
+    pattern_type = pattern_type.lower().strip()
+    if pattern_type not in VALID_PATTERNS:
+        abort(404)
+
+    search = request.args.get("search", "")
+    try:
+        page = max(1, int(request.args.get("page", 1)))
+    except ValueError:
+        page = 1
+
+    date = latest_date_with_pattern(pattern_type)
+    if not date:
+        return jsonify({"domains": [], "has_more": False, "page": page})
+
+    file_path = LISTS_FOLDER / date / pattern_type / "deleted.txt.gz"
+    domains, has_more, matched_count = browse_domains_from_path(file_path, search, page)
+
+    return jsonify({
+        "domains": domains,
+        "has_more": has_more,
+        "page": page,
+        "per_page": DOMAINS_PER_PAGE,
+    })
+
+
+@app.route("/deleted/<pattern_type>/download")
+def download_deleted_pattern(pattern_type):
+    """Download compressed list for a specific pattern."""
+    pattern_type = pattern_type.lower().strip()
+    if pattern_type not in VALID_PATTERNS:
+        abort(404)
+
+    date = latest_date_with_pattern(pattern_type)
+    if not date:
+        abort(404)
+
+    file_path = LISTS_FOLDER / date / pattern_type / "deleted.txt.gz"
+    if not file_path.exists():
+        abort(404)
+
+    download_name = f"deleted-{pattern_type}-{date}.txt.gz"
+    return send_file(
+        file_path,
+        as_attachment=True,
+        download_name=download_name,
+        mimetype="application/gzip",
+    )
+
+
+# ==============================================================
 # Browse pages: /tld/<tld>/all, /tld/<tld>/new, /tld/<tld>/deleted
 # ==============================================================
 BROWSE_KIND_BY_SLUG = {
@@ -198,13 +356,11 @@ def tld_browse_page(tld, slug):
     if data is None:
         abort(404)
 
-    #info = load_tld_info(tld)
     sizes = get_download_sizes(tld)
 
     return render_template(
         "tld_browse.html",
         data=data,
-        #info=info,
         sizes=sizes,
         kind=kind,
         slug=slug,
