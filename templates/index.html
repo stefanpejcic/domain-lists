@@ -37,6 +37,10 @@
     </script>
 </head>
 
+<script id="tlds-data" type="application/json">
+{{ tlds | tojson }}
+</script>
+
 <body class="bg-gray-50 text-gray-900">
 
 <div class="min-h-screen">
@@ -155,39 +159,79 @@
 
 
         <!-- TLD list -->
-        <div
-            class="mt-8"
-            x-data="{
-                search: '',
-                sort: 'tld',
+<div
+    class="mt-8"
+    x-data="{
+        items: [],
+        search: '',
+        sort: 'domains',
+        direction: 'desc',
 
-                matches(tld) {
-                    return tld.tld
-                        .toLowerCase()
-                        .includes(this.search.toLowerCase());
-                },
+        init() {
+            this.items = JSON.parse(
+                document.getElementById('tlds-data').textContent
+            );
+        },
 
-                sorted(items) {
-                    return [...items].sort((a, b) => {
+        matches(tld) {
+            return tld.tld
+                .toLowerCase()
+                .includes(this.search.toLowerCase());
+        },
 
-                        if (this.sort === 'domains') {
-                            return b.domains - a.domains;
-                        }
+        sortBy(column) {
+            if (this.sort === column) {
+                this.direction =
+                    this.direction === 'asc'
+                        ? 'desc'
+                        : 'asc';
+            } else {
+                this.sort = column;
 
-                        if (this.sort === 'new') {
-                            return b.new - a.new;
-                        }
+                this.direction =
+                    column === 'tld'
+                        ? 'asc'
+                        : 'desc';
+            }
+        },
 
-                        if (this.sort === 'deleted') {
-                            return b.deleted - a.deleted;
-                        }
+        sorted() {
+            return this.items
+                .filter(item => this.matches(item))
+                .sort((a, b) => {
 
-                        return a.tld.localeCompare(b.tld);
-                    });
-                }
-            }"
-        >
+                    if (this.sort === 'tld') {
+                        const result =
+                            a.tld.localeCompare(b.tld);
 
+                        return this.direction === 'asc'
+                            ? result
+                            : -result;
+                    }
+
+                    const aValue =
+                        Number(a[this.sort]) || 0;
+
+                    const bValue =
+                        Number(b[this.sort]) || 0;
+
+                    return this.direction === 'asc'
+                        ? aValue - bValue
+                        : bValue - aValue;
+                });
+        },
+
+        arrow(column) {
+            if (this.sort !== column) {
+                return '';
+            }
+
+            return this.direction === 'asc'
+                ? '↑'
+                : '↓';
+        }
+    }"
+>
             <div class="rounded-xl border bg-white shadow-sm">
 
                 <!-- Table header -->
@@ -216,28 +260,6 @@
                                 class="w-48 rounded-lg border px-3 py-2 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
                             >
 
-                            <!-- Sort -->
-                            <select
-                                x-model="sort"
-                                class="rounded-lg border px-3 py-2 text-sm"
-                            >
-                                <option value="tld">
-                                    TLD
-                                </option>
-
-                                <option value="domains">
-                                    Most domains
-                                </option>
-
-                                <option value="new">
-                                    Most new
-                                </option>
-
-                                <option value="deleted">
-                                    Most deleted
-                                </option>
-                            </select>
-
                         </div>
 
                     </div>
@@ -249,105 +271,134 @@
                 <div class="overflow-x-auto">
 
                     <table class="w-full text-left text-sm">
+						
+<thead class="bg-gray-50 text-xs uppercase text-gray-500">
+    <tr>
 
-                        <thead class="bg-gray-50 text-xs uppercase text-gray-500">
-
-                            <tr>
-                                <th class="px-5 py-3">
-                                    TLD
-                                </th>
-
-                                <th class="px-5 py-3 text-right">
-                                    Domains
-                                </th>
-
-                                <th class="px-5 py-3 text-right">
-                                    New
-                                </th>
-
-                                <th class="px-5 py-3 text-right">
-                                    Deleted
-                                </th>
-
-                                <th class="px-5 py-3 text-right">
-                                Downloads
-				</th>
-                            </tr>
-
-                        </thead>
-
-
-                        <tbody class="divide-y">
-
-                            {% for tld in tlds %}
-
-                            <tr
-                                x-show="matches({{ tld | tojson }})"
-                                class="hover:bg-gray-50"
-                            >
-
-                                <td class="px-5 py-4">
-
-                                    <a
-                                        href="/tld/{{ tld.tld }}"
-                                        class="font-semibold text-sky-600 hover:text-sky-800"
-                                    >
-                                        .{{ tld.tld }}
-                                    </a>
-
-                                </td>
-
-                                <td class="px-5 py-4 text-right font-medium">
-                                    {{ "{:,}".format(tld.domains) }}
-                                </td>
-
-                                <td class="px-5 py-4 text-right text-emerald-600">
-                                    +{{ "{:,}".format(tld.new) }}
-                                </td>
-
-                                <td class="px-5 py-4 text-right text-red-600">
-                                    -{{ "{:,}".format(tld.deleted) }}
-                                </td>
-
-
-<td class="px-5 py-4 text-right">
-    <div class="flex items-center justify-end gap-2">
-        <a
-            href="{{ url_for('download_tld_list', tld=tld.tld, kind='domains') }}"
-            title="Download all domains"
-            class="rounded-lg bg-gray-100 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-200"
+        <th
+            class="cursor-pointer select-none px-5 py-3 hover:bg-gray-100"
+            @click="sortBy('tld')"
         >
-            All
-        </a>
-        <a
-            href="{{ url_for('download_tld_list', tld=tld.tld, kind='new') }}"
-            title="Download new domains"
-            class="rounded-lg bg-emerald-50 px-2.5 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-100"
+            <div class="flex items-center gap-1">
+                TLD
+                <span x-text="arrow('tld')"></span>
+            </div>
+        </th>
+
+        <th
+            class="cursor-pointer select-none px-5 py-3 text-right hover:bg-gray-100"
+            @click="sortBy('domains')"
         >
-            New
-        </a>
-        <a
-            href="{{ url_for('download_tld_list', tld=tld.tld, kind='deleted') }}"
-            title="Download deleted domains"
-            class="rounded-lg bg-red-50 px-2.5 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100"
+            <div class="flex items-center justify-end gap-1">
+                Domains
+                <span x-text="arrow('domains')"></span>
+            </div>
+        </th>
+
+        <th
+            class="cursor-pointer select-none px-5 py-3 text-right hover:bg-gray-100"
+            @click="sortBy('new')"
         >
-            Deleted
-        </a>
-        <a
-            href="/tld/{{ tld.tld }}"
-            class="text-gray-400 hover:text-gray-700"
+            <div class="flex items-center justify-end gap-1">
+                New
+                <span x-text="arrow('new')"></span>
+            </div>
+        </th>
+
+        <th
+            class="cursor-pointer select-none px-5 py-3 text-right hover:bg-gray-100"
+            @click="sortBy('deleted')"
         >
-            View →
-        </a>
-    </div>
-</td>
+            <div class="flex items-center justify-end gap-1">
+                Deleted
+                <span x-text="arrow('deleted')"></span>
+            </div>
+        </th>
 
-                            </tr>
+        <th class="px-5 py-3 text-right">
+            Downloads
+        </th>
 
-                            {% endfor %}
+    </tr>
+</thead>
 
-                        </tbody>
 
+<tbody class="divide-y">
+
+    <template
+        x-for="tld in sorted()"
+        :key="tld.tld"
+    >
+
+        <tr class="hover:bg-gray-50">
+
+            <td class="px-5 py-4">
+                <a
+                    :href="'/tld/' + tld.tld"
+                    class="font-semibold text-sky-600 hover:text-sky-800"
+                    x-text="'.' + tld.tld"
+                ></a>
+            </td>
+
+            <td
+                class="px-5 py-4 text-right font-medium"
+                x-text="Number(tld.domains).toLocaleString()"
+            ></td>
+
+            <td
+                class="px-5 py-4 text-right text-emerald-600"
+                x-text="'+' + Number(tld.new).toLocaleString()"
+            ></td>
+
+            <td
+                class="px-5 py-4 text-right text-red-600"
+                x-text="'-' + Number(tld.deleted).toLocaleString()"
+            ></td>
+
+            <td class="px-5 py-4 text-right">
+                <div class="flex items-center justify-end gap-2">
+
+                    <a
+                        :href="'/tld/' + tld.tld + '/download/domains'"
+                        title="Download all domains"
+                        class="rounded-lg bg-gray-100 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-200"
+                    >
+                        All
+                    </a>
+
+                    <a
+                        :href="'/tld/' + tld.tld + '/download/new'"
+                        title="Download new domains"
+                        class="rounded-lg bg-emerald-50 px-2.5 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-100"
+                    >
+                        New
+                    </a>
+
+                    <a
+                        :href="'/tld/' + tld.tld + '/download/deleted'"
+                        title="Download deleted domains"
+                        class="rounded-lg bg-red-50 px-2.5 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100"
+                    >
+                        Deleted
+                    </a>
+
+                    <a
+                        :href="'/tld/' + tld.tld"
+                        class="text-gray-400 hover:text-gray-700"
+                    >
+                        View →
+                    </a>
+
+                </div>
+            </td>
+
+        </tr>
+
+    </template>
+
+</tbody>
+						
+						
                     </table>
 
                 </div>
