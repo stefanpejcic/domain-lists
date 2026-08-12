@@ -110,7 +110,7 @@
     <!-- Total / All Domains -->
     <a 
         href="{{ url_for('download_tld_list', tld='all', kind='domains') }}"
-        @mouseenter="kind = 'domains'"
+        @mouseenter="kind = 'domains'; $dispatch('sort-table', { column: 'domains' })"
         :class="{
             'bg-white shadow text-gray-900': kind === 'domains',
             'text-gray-600 hover:text-gray-900': kind !== 'domains'
@@ -127,7 +127,7 @@
     <!-- New Domains -->
     <a 
         href="{{ url_for('download_tld_list', tld='all', kind='new') }}"
-        @mouseenter="kind = 'new'"
+        @mouseenter="kind = 'new'; $dispatch('sort-table', { column: 'new' })"
         :class="{
             'bg-white shadow text-gray-900': kind === 'new',
             'text-gray-600 hover:text-gray-900': kind !== 'new'
@@ -144,7 +144,7 @@
     <!-- Deleted Domains -->
     <a 
         href="{{ url_for('download_tld_list', tld='all', kind='deleted') }}"
-        @mouseenter="kind = 'deleted'"
+        @mouseenter="kind = 'deleted'; $dispatch('sort-table', { column: 'deleted' })"
         :class="{
             'bg-white shadow text-gray-900': kind === 'deleted',
             'text-gray-600 hover:text-gray-900': kind !== 'deleted'
@@ -244,6 +244,7 @@
                 : '↓';
         }
     }"
+	@sort-table.window="sort = $event.detail.column; direction = 'desc'"
 >
             <div class="relative pt-8 border border-gray-200 rounded-lg shadow-sm bg-white">
 
