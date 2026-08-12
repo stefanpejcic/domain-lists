@@ -154,6 +154,7 @@ def validate_tld(tld):
 @app.route("/")
 def index():
     summary = load_summary()
+    sizes = get_download_sizes('all')
     if summary is None:
         summary = {
             "date": None,
@@ -168,6 +169,7 @@ def index():
     tlds = load_tlds()
     return render_template(
         "index.html",
+        sizes=sizes,
         summary=summary,
         tlds=tlds,
     )
