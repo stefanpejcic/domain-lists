@@ -2,18 +2,11 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta
-        name="viewport"
-        content="width=device-width, initial-scale=1.0"
-    >
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
     <title>.{{ data.tld }} {{ 'newly registered' if kind == 'new' else ('deleted' if kind == 'deleted' else 'all') }} domains — Domain Zone Data</title>
 
-    <script
-        defer
-        src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"
-    ></script>
-
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
 
@@ -23,18 +16,13 @@
 
     <header class="border-b bg-white">
         <div class="mx-auto max-w-7xl px-6 py-5 flex items-center justify-between">
-
-              <a href="{{ url_for('index') }}"
-                class="text-sm text-gray-500 hover:text-gray-900"
-            >
+            <a href="{{ url_for('index') }}" class="text-sm text-gray-500 hover:text-gray-900">
                 ← All TLDs
             </a>
 
-                <div class="text-right text-sm text-gray-500">
-					Last update: <span class="font-medium text-gray-900">{{ data.last_updated }}</span>, next update in <span id="next-update" class="font-medium text-gray-900">calculating...</span>
-                </div>
-         
-
+            <div class="text-right text-sm text-gray-500">
+                Last update: <span class="font-medium text-gray-900">{{ data.last_updated }}</span>, next update in <span id="next-update" class="font-medium text-gray-900">calculating...</span>
+            </div>
         </div>
     </header>
 
@@ -69,10 +57,6 @@
                     });
             },
 
-            switchKind(slug, k) {
-                window.location.href = '/tld/{{ data.tld }}/' + slug;
-            },
-
             doSearch() {
                 this.page = 1;
                 this.load();
@@ -93,38 +77,86 @@
     >
 
         <div class="max-w-2xl mx-auto text-center mb-10">
+            <!-- Dynamic Heading -->
             <h1 class="mx-auto text-3xl font-bold text-gray-900 sm:text-4xl sm:leading-none sm:tracking-tight">
-                {% if kind == 'new' %}
-                List of newly registered .{{ data.tld }} domains
-                {% elif kind == 'deleted' %}
-                List of deleted .{{ data.tld }} domains
-                {% else %}
-                List of all registered .{{ data.tld }} domains
-                {% endif %}
+                <span x-show="kind === 'domains' || kind === 'all'">List of all registered .{{ data.tld }} domains</span>
+                <template x-if="kind === 'new'">
+                    <span>List of newly registered .{{ data.tld }} domains</span>
+                </template>
+                <template x-if="kind === 'deleted'">
+                    <span>List of deleted .{{ data.tld }} domains</span>
+                </template>
             </h1>
+
+            <!-- Dynamic Subtitle -->
             <p class="mt-2 text-xl text-gray-600">
-                {% if kind == 'new' %}
-                <span class="font-bold text-emerald-600">+{{ "{:,}".format(data.new) }}</span> .{{ data.tld }} domains newly registered in the last 24h.
-                {% elif kind == 'deleted' %}
-                <span class="font-bold text-red-600">-{{ "{:,}".format(data.deleted) }}</span> .{{ data.tld }} domains deleted in the last 24h.
-                {% else %}
-                Full list of <span class="font-bold">{{ "{:,}".format(data.domains) }}</span> registered .{{ data.tld }} domains.
-                {% endif %}
+                <span x-show="kind === 'domains' || kind === 'all'">
+                    Full list of <span class="font-bold">{{ "{:,}".format(data.domains) }}</span> registered .{{ data.tld }} domains.
+                </span>
+                <template x-if="kind === 'new'">
+                    <span>
+                        <span class="font-bold text-emerald-600">+{{ "{:,}".format(data.new) }}</span> .{{ data.tld }} domains newly registered in the last 24h.
+                    </span>
+                </template>
+                <template x-if="kind === 'deleted'">
+                    <span>
+                        <span class="font-bold text-red-600">-{{ "{:,}".format(data.deleted) }}</span> .{{ data.tld }} domains deleted in the last 24h.
+                    </span>
+                </template>
             </p>
 
+            <!-- Download Tabs (Interactive Hover & Direct Download on Click) -->
             <div class="inline-flex mt-6 p-1 bg-gray-200 rounded-lg">
-                
-                    <a href="{{ url_for('tld_browse_page', tld=data.tld, slug='all') }}"
-                    class="px-4 py-2 text-sm font-medium rounded-md {{ 'bg-white shadow text-gray-900' if kind == 'domains' else 'text-gray-600 hover:text-gray-900' }}"
-                >Total</a>
-                
-                    <a href="{{ url_for('tld_browse_page', tld=data.tld, slug='new') }}"
-                    class="px-4 py-2 text-sm font-medium rounded-md {{ 'bg-white shadow text-gray-900' if kind == 'new' else 'text-gray-600 hover:text-gray-900' }}"
-                >New</a>
-                
-                    <a href="{{ url_for('tld_browse_page', tld=data.tld, slug='deleted') }}"
-                    class="px-4 py-2 text-sm font-medium rounded-md {{ 'bg-white shadow text-gray-900' if kind == 'deleted' else 'text-gray-600 hover:text-gray-900' }}"
-                >Deleted</a>
+                <!-- Total / All Domains -->
+                <a 
+                    href="{{ url_for('download_tld_list', tld=data.tld, kind='domains') }}"
+                    @mouseenter="kind = 'domains'"
+                    :class="{
+                        'bg-white shadow text-gray-900': kind === 'domains' || kind === 'all',
+                        'text-gray-600 hover:text-gray-900': kind !== 'domains' && kind !== 'all'
+                    }"
+                    class="px-4 py-2 text-sm font-medium rounded-md transition-colors cursor-pointer select-none flex items-center gap-2"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-download" viewBox="0 0 16 16">
+                        <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5"></path>
+                        <path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708z"></path>
+                    </svg>
+                    <span>All .{{ data.tld }} domains {% if sizes.domains %}<span class="ml-1 text-xs text-gray-400">({{ sizes.domains | filesizeformat }})</span>{% endif %}</span>
+                </a>
+
+                <!-- New Domains -->
+                <a 
+                    href="{{ url_for('download_tld_list', tld=data.tld, kind='new') }}"
+                    @mouseenter="kind = 'new'"
+                    :class="{
+                        'bg-white shadow text-gray-900': kind === 'new',
+                        'text-gray-600 hover:text-gray-900': kind !== 'new'
+                    }"
+                    class="px-4 py-2 text-sm font-medium rounded-md transition-colors cursor-pointer select-none flex items-center gap-2"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-download" viewBox="0 0 16 16">
+                        <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5"></path>
+                        <path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708z"></path>
+                    </svg>
+                    <span>New .{{ data.tld }} {% if sizes.new %}<span class="ml-1 text-xs text-gray-400">({{ sizes.new | filesizeformat }})</span>{% endif %}</span>
+                </a>
+
+                <!-- Deleted Domains -->
+                <a 
+                    href="{{ url_for('download_tld_list', tld=data.tld, kind='deleted') }}"
+                    @mouseenter="kind = 'deleted'"
+                    :class="{
+                        'bg-white shadow text-gray-900': kind === 'deleted',
+                        'text-gray-600 hover:text-gray-900': kind !== 'deleted'
+                    }"
+                    class="px-4 py-2 text-sm font-medium rounded-md transition-colors cursor-pointer select-none flex items-center gap-2"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-download" viewBox="0 0 16 16">
+                        <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5"></path>
+                        <path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708z"></path>
+                    </svg>
+                    <span>Deleted .{{ data.tld }} {% if sizes.deleted %}<span class="ml-1 text-xs text-gray-400">({{ sizes.deleted | filesizeformat }})</span>{% endif %}</span>
+                </a>
             </div>
         </div>
 
@@ -158,7 +190,7 @@
                         Search
                     </button>
 
-                    <a href="{{ url_for('download_tld_list', tld=data.tld, kind=kind) }}"
+                    <a :href="'/download/' + '{{ data.tld }}' + '/' + (kind === 'all' ? 'domains' : kind)"
                         class="flex gap-2 items-center px-3 py-2 text-sm font-semibold text-white transition-colors bg-gray-800 rounded-lg hover:bg-gray-900"
                     >
                         Download list
@@ -206,13 +238,7 @@
                     </button>
                 </div>
             </div>
-
-
-
-            
-
         </div>
-
 
 {% if info %}
         <div class="mt-8 rounded-xl border bg-white p-6 shadow-sm">
@@ -325,7 +351,6 @@
         </div>
         {% endif %}
 
-
     </main>
 </div>
 
@@ -342,10 +367,8 @@
             return;
         }
 
-        // Calculate hours remaining (rounded up so "0h 45m" displays as "1h")
         const hours = Math.ceil(diff / (1000 * 60 * 60));
-
-		document.getElementById("next-update").textContent = 
+        document.getElementById("next-update").textContent = 
             `${hours} ${hours === 1 ? 'hour' : 'hours'}`;
     }
 
