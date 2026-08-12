@@ -173,26 +173,6 @@ def index():
     )
 
 
-@app.route("/tld/<tld>")
-def tld_detail(tld):
-    tld = validate_tld(tld)
-
-    latest_file = JSON_FOLDER / tld / "latest"
-    data = load_json(latest_file)
-    if data is None:
-        abort(404)
-
-    info = load_tld_info(tld)
-    sizes = get_download_sizes(tld)
-
-    return render_template(
-        "tld.html",
-        data=data,
-        info=info,
-        sizes=sizes,
-    )
-
-
 # ==============================================================
 # Browse pages: /tld/<tld>/all, /tld/<tld>/new, /tld/<tld>/deleted
 # ==============================================================
@@ -216,11 +196,13 @@ def tld_browse_page(tld, slug):
     if data is None:
         abort(404)
 
+    info = load_tld_info(tld)
     sizes = get_download_sizes(tld)
 
     return render_template(
         "tld_browse.html",
         data=data,
+        inf=info,
         sizes=sizes,
         kind=kind,
         slug=slug,
