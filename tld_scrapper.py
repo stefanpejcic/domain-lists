@@ -149,7 +149,7 @@ def process_tld(tld):
         return tld, None
 
     data = parse_tld_html(html)
-    with open(f"json/{tld}.json", 'w') as f:
+    with open(f"json/{tld}/info.json", 'w') as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
     return tld, data
 
@@ -182,9 +182,9 @@ def main():
 
     if not args.tld:
         all_tlds = [results[t] for t in tlds if t in results]
-        with open('tlds.json', 'w') as f:
+        with open('info.json', 'w') as f:
             json.dump({'tlds': all_tlds}, f, indent=2, ensure_ascii=False)
-        print("Saved combined tlds.json")
+        print("Saved combined info.json")
     else:
         print(json.dumps(results.get(args.tld.lower(), {}), indent=2, ensure_ascii=False))
 
