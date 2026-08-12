@@ -350,6 +350,221 @@
         </div>
         {% endif %}
 
+
+<div class="mt-8 rounded-xl border bg-white p-6 shadow-sm">
+
+    <h2 class="text-lg font-semibold text-gray-900">
+        Download Zone Data
+    </h2>
+
+    <p class="mt-2 text-sm leading-6 text-gray-500">
+        Daily domain zone data for .{{ data.tld }} and other TLDs is available through the downloadable zone lists below.
+    </p>
+
+    <!-- 2-Column Grid Layout -->
+    <div class="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+
+        <!-- Column 1: All zones combined -->
+        <div class="flex flex-col gap-3 text-sm">
+            <span class="font-medium text-gray-900">All zones combined</span>
+
+            <!-- Block 1: All domains -->
+            <div x-data="{ 
+                copied: false,
+                copyText(text) {
+                    if (navigator.clipboard && window.isSecureContext) {
+                        navigator.clipboard.writeText(text);
+                    } else {
+                        const textarea = document.createElement('textarea');
+                        textarea.value = text;
+                        textarea.style.position = 'fixed';
+                        textarea.style.opacity = '0';
+                        document.body.appendChild(textarea);
+                        textarea.focus();
+                        textarea.select();
+                        try { document.execCommand('copy'); } catch (err) {}
+                        document.body.removeChild(textarea);
+                    }
+                    this.copied = true;
+                    setTimeout(() => this.copied = false, 2000);
+                }
+            }" class="flex items-center gap-2">
+                <pre class="flex-1 overflow-x-auto rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 font-mono text-xs text-gray-800"><code>{{ request.host_url.rstrip('/') }}{{ url_for('download_tld_list', tld='all', kind='domains') }}</code></pre>
+                <button
+                    type="button"
+                    @click="copyText($el.parentElement.querySelector('code').textContent.trim())"
+                    class="rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                >
+                    <span x-text="copied ? 'Copied!' : 'Copy'"></span>
+                </button>
+            </div>
+
+            <!-- Block 2: New domains -->
+            <div x-data="{ 
+                copied: false,
+                copyText(text) {
+                    if (navigator.clipboard && window.isSecureContext) {
+                        navigator.clipboard.writeText(text);
+                    } else {
+                        const textarea = document.createElement('textarea');
+                        textarea.value = text;
+                        textarea.style.position = 'fixed';
+                        textarea.style.opacity = '0';
+                        document.body.appendChild(textarea);
+                        textarea.focus();
+                        textarea.select();
+                        try { document.execCommand('copy'); } catch (err) {}
+                        document.body.removeChild(textarea);
+                    }
+                    this.copied = true;
+                    setTimeout(() => this.copied = false, 2000);
+                }
+            }" class="flex items-center gap-2">
+                <pre class="flex-1 overflow-x-auto rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 font-mono text-xs text-gray-800"><code>{{ request.host_url.rstrip('/') }}{{ url_for('download_tld_list', tld='all', kind='new') }}</code></pre>
+                <button
+                    type="button"
+                    @click="copyText($el.parentElement.querySelector('code').textContent.trim())"
+                    class="rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                >
+                    <span x-text="copied ? 'Copied!' : 'Copy'"></span>
+                </button>
+            </div>
+
+            <!-- Block 3: Deleted domains -->
+            <div x-data="{ 
+                copied: false,
+                copyText(text) {
+                    if (navigator.clipboard && window.isSecureContext) {
+                        navigator.clipboard.writeText(text);
+                    } else {
+                        const textarea = document.createElement('textarea');
+                        textarea.value = text;
+                        textarea.style.position = 'fixed';
+                        textarea.style.opacity = '0';
+                        document.body.appendChild(textarea);
+                        textarea.focus();
+                        textarea.select();
+                        try { document.execCommand('copy'); } catch (err) {}
+                        document.body.removeChild(textarea);
+                    }
+                    this.copied = true;
+                    setTimeout(() => this.copied = false, 2000);
+                }
+            }" class="flex items-center gap-2">
+                <pre class="flex-1 overflow-x-auto rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 font-mono text-xs text-gray-800"><code>{{ request.host_url.rstrip('/') }}{{ url_for('download_tld_list', tld='all', kind='deleted') }}</code></pre>
+                <button
+                    type="button"
+                    @click="copyText($el.parentElement.querySelector('code').textContent.trim())"
+                    class="rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                >
+                    <span x-text="copied ? 'Copied!' : 'Copy'"></span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Column 2: Individual zones -->
+        <div class="flex flex-col gap-3 text-sm">
+            <span class="font-medium text-gray-900">Individual zones</span>
+
+            <!-- Block 4: Per TLD domains -->
+            <div x-data="{ 
+                copied: false,
+                copyText(text) {
+                    if (navigator.clipboard && window.isSecureContext) {
+                        navigator.clipboard.writeText(text);
+                    } else {
+                        const textarea = document.createElement('textarea');
+                        textarea.value = text;
+                        textarea.style.position = 'fixed';
+                        textarea.style.opacity = '0';
+                        document.body.appendChild(textarea);
+                        textarea.focus();
+                        textarea.select();
+                        try { document.execCommand('copy'); } catch (err) {}
+                        document.body.removeChild(textarea);
+                    }
+                    this.copied = true;
+                    setTimeout(() => this.copied = false, 2000);
+                }
+            }" class="flex items-center gap-2">
+                <pre class="flex-1 overflow-x-auto rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 font-mono text-xs text-gray-800"><code>{{ request.host_url.rstrip('/') }}/tld/{{ data.tld }}/download/domains</code></pre>
+                <button
+                    type="button"
+                    @click="copyText($el.parentElement.querySelector('code').textContent.trim())"
+                    class="rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                >
+                    <span x-text="copied ? 'Copied!' : 'Copy'"></span>
+                </button>
+            </div>
+
+            <!-- Block 5: Per TLD new -->
+            <div x-data="{ 
+                copied: false,
+                copyText(text) {
+                    if (navigator.clipboard && window.isSecureContext) {
+                        navigator.clipboard.writeText(text);
+                    } else {
+                        const textarea = document.createElement('textarea');
+                        textarea.value = text;
+                        textarea.style.position = 'fixed';
+                        textarea.style.opacity = '0';
+                        document.body.appendChild(textarea);
+                        textarea.focus();
+                        textarea.select();
+                        try { document.execCommand('copy'); } catch (err) {}
+                        document.body.removeChild(textarea);
+                    }
+                    this.copied = true;
+                    setTimeout(() => this.copied = false, 2000);
+                }
+            }" class="flex items-center gap-2">
+                <pre class="flex-1 overflow-x-auto rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 font-mono text-xs text-gray-800"><code>{{ request.host_url.rstrip('/') }}/tld/{{ data.tld }}/download/new</code></pre>
+                <button
+                    type="button"
+                    @click="copyText($el.parentElement.querySelector('code').textContent.trim())"
+                    class="rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                >
+                    <span x-text="copied ? 'Copied!' : 'Copy'"></span>
+                </button>
+            </div>
+
+            <!-- Block 6: Per TLD deleted -->
+            <div x-data="{ 
+                copied: false,
+                copyText(text) {
+                    if (navigator.clipboard && window.isSecureContext) {
+                        navigator.clipboard.writeText(text);
+                    } else {
+                        const textarea = document.createElement('textarea');
+                        textarea.value = text;
+                        textarea.style.position = 'fixed';
+                        textarea.style.opacity = '0';
+                        document.body.appendChild(textarea);
+                        textarea.focus();
+                        textarea.select();
+                        try { document.execCommand('copy'); } catch (err) {}
+                        document.body.removeChild(textarea);
+                    }
+                    this.copied = true;
+                    setTimeout(() => this.copied = false, 2000);
+                }
+            }" class="flex items-center gap-2">
+                <pre class="flex-1 overflow-x-auto rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 font-mono text-xs text-gray-800"><code>{{ request.host_url.rstrip('/') }}/tld/{{ data.tld }}/download/deleted</code></pre>
+                <button
+                    type="button"
+                    @click="copyText($el.parentElement.querySelector('code').textContent.trim())"
+                    class="rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                >
+                    <span x-text="copied ? 'Copied!' : 'Copy'"></span>
+                </button>
+            </div>
+        </div>
+
+    </div>
+
+</div>
+
+        
     </main>
 </div>
 
