@@ -86,6 +86,27 @@ def index():
         tlds=tlds,
     )
 
+def human_size(num_bytes):
+    if num_bytes is None:
+        return None
+    size = float(num_bytes)
+    for unit in ("B", "KB", "MB", "GB"):
+        if size < 1024:
+            return f"{size:.0f}{unit}" if unit == "B" else f"{size:.1f}{unit}"
+        size /= 1024
+    return f"{size:.1f}TB"
+
+
+def get_download_sizes(tld):
+    date = latest_date_with_domains(tld)
+    if date is None:
+        return {"domains": None, "new": None, "deleted": None}
+
+    sizes = {}
+    for kind in ("domains", "new", "deleted"):
+        path = LISTS_FOLDER / date / kind / f"{tld}.txt.gz"
+        sizes[kind] = path.stat().st_size if path.exists() else None
+    return sizes
 
 @app.route("/tld/<tld>")
 def tld_detail(tld):
@@ -99,11 +120,13 @@ def tld_detail(tld):
         abort(404)
 
     info = load_tld_info(tld)
+    sizes = get_download_sizes(tld)
 
     return render_template(
         "tld.html",
         data=data,
         info=info,
+        sizes=sizes,
     )
 
 
