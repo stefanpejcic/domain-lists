@@ -291,12 +291,12 @@
 
 
                 <!-- Table -->
-                <div class="overflow-x-auto">
+                <div class="overflow-visible">
 
-                    <table class="w-full text-left text-sm">
+                    <table class="w-full text-left text-sm border-collapse">
 						
-<thead class="bg-gray-50 text-xs uppercase text-gray-500">
-    <tr>
+<thead class="sticky top-0 z-10 bg-gray-50 text-xs uppercase text-gray-500 shadow-sm">
+	<tr>
 
         <th
             class="cursor-pointer select-none px-5 py-3 hover:bg-gray-100"
@@ -346,8 +346,7 @@
 </thead>
 
 
-<tbody class="divide-y">
-
+<tbody class="divide-y bg-white">
     <template
         x-for="tld in sorted()"
         :key="tld.tld"
