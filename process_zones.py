@@ -417,6 +417,159 @@ def write_tld_json(result, updated_at):
     log(f"{tld}: JSON -> {json_file}")
 
 
+
+def write_combined_json(results=None, updated_at=None):
+    """
+    Combine all TLD domain lists for TODAY and write the combined JSON.
+
+    Creates:
+        /lists/TODAY/domains/all.txt.gz
+        /lists/TODAY/new/all.txt.gz
+        /lists/TODAY/deleted/all.txt.gz
+
+    And:
+        /json/TODAY.json
+
+    Uses external `sort -u`, so the combined lists are disk-backed
+    and do not require loading all domains into RAM.
+    """
+
+    today_folder = LISTS_FOLDER / TODAY
+
+    combined_counts = {
+        "domains": 0,
+        "new": 0,
+        "deleted": 0,
+    }
+
+    # ----------------------------------------------------------
+    # Combine domains, new and deleted
+    # ----------------------------------------------------------
+
+    for data_type in ("domains", "new", "deleted"):
+
+        folder = today_folder / data_type
+        folder.mkdir(parents=True, exist_ok=True)
+
+        output_file = folder / "all.txt.gz"
+
+        raw_file = Path("/tmp") / f"combined_{data_type}_{TODAY}.txt"
+        sorted_file = Path("/tmp") / f"combined_{data_type}_{TODAY}_sorted.txt"
+
+        log(f"Combining {data_type} lists...")
+
+        try:
+            # Combine all per-TLD gzip files.
+            with open(raw_file, "wb") as out:
+
+                for gz_file in sorted(folder.glob("*.txt.gz")):
+
+                    # Never include the combined file itself.
+                    if gz_file.name == "all.txt.gz":
+                        continue
+
+                    with gzip.open(gz_file, "rb") as src:
+
+                        while True:
+                            chunk = src.read(16 * 1024 * 1024)
+
+                            if not chunk:
+                                break
+
+                            out.write(chunk)
+
+            # Sort + deduplicate using external sort.
+            subprocess.run(
+                [
+                    "sort",
+                    "-u",
+                    "-S", SORT_MEMORY,
+                    "-o", str(sorted_file),
+                    str(raw_file),
+                ],
+                check=True,
+            )
+
+            # Count final unique domains.
+            count = count_lines(sorted_file)
+            combined_counts[data_type] = count
+
+            # Compress final combined list.
+            gzip_file(sorted_file, output_file)
+
+            log(
+                f"Combined {data_type}: "
+                f"{count:,} domains -> {output_file}"
+            )
+
+        except Exception as e:
+            log(f"Failed to combine {data_type}: {e}")
+
+        finally:
+            try:
+                raw_file.unlink(missing_ok=True)
+            except Exception:
+                pass
+
+            try:
+                sorted_file.unlink(missing_ok=True)
+            except Exception:
+                pass
+
+    # ----------------------------------------------------------
+    # Count TLDs actually included in today's combined lists
+    # ----------------------------------------------------------
+    
+    total_tlds = 0
+    
+    domains_folder = today_folder / "domains"
+    
+    for gz_file in domains_folder.glob("*.txt.gz"):
+    
+        if gz_file.name == "all.txt.gz":
+            continue
+    
+        total_tlds += 1
+
+    # ----------------------------------------------------------
+    # Write combined JSON
+    # ----------------------------------------------------------
+
+    if updated_at is None:
+        updated_at = datetime.now(TIMEZONE).isoformat(
+            timespec="seconds"
+        )
+
+    data = {
+        "date": TODAY,
+        "tlds": total_tlds,
+        "domains": combined_counts["domains"],
+        "new": combined_counts["new"],
+        "deleted": combined_counts["deleted"],
+        "last_updated": updated_at,
+        "timezone": TIMEZONE_NAME,
+    }
+
+    JSON_FOLDER.mkdir(parents=True, exist_ok=True)
+
+    combined_file = JSON_FOLDER / f"{TODAY}.json"
+    tmp = Path(str(combined_file) + ".tmp")
+
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(
+            data,
+            f,
+            indent=2,
+            ensure_ascii=False,
+        )
+        f.write("\n")
+
+    os.replace(tmp, combined_file)
+
+    log(f"Combined JSON -> {combined_file}")
+
+    return data
+
 # ==============================================================
 # Generate summary JSON
 # ==============================================================
@@ -571,15 +724,25 @@ def main():
             log(f"{result['tld']}: FAILED - {result.get('reason', 'Unknown error')}")
 
     updated_at = datetime.now(TIMEZONE).isoformat(timespec="seconds")
-
+    
     for result in results:
         if result["success"]:
             write_tld_json(result, updated_at)
-
+    
+    # ----------------------------------------------------------
+    # Generate combined lists + combined JSON
+    # ----------------------------------------------------------
+    
+    combined = write_combined_json(results, updated_at)
+    
+    # ----------------------------------------------------------
+    # Generate summary JSON
+    # ----------------------------------------------------------
+    
     summary = generate_summary_json(updated_at)
-
+    
     elapsed = time.time() - start_time
-
+    
     log("")
     log("==============================================")
     log("Processing Summary")
@@ -595,7 +758,7 @@ def main():
     log(f"Total elapsed: {elapsed:.2f} seconds")
     log("==============================================")
     log("")
-
+    
     return 0 if fail_count == 0 else 1
 
 
