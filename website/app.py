@@ -364,9 +364,12 @@ def tld_browse_page(tld, slug):
     data = load_json(latest_file)
     if data is None:
         abort(404)
+    data["tld_unicode"] = unicode_domain(data.get("tld", ""))
 
     sizes = get_download_sizes(tld)
 
+    data["tld_unicode"] = unicode_domain(data.get("tld", ""))
+    
     return render_template(
         "tld_browse.html",
         data=data,
