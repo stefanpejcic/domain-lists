@@ -10,6 +10,8 @@ python3 -m venv "$REPO_DIR/venv"
 "$REPO_DIR/venv/bin/pip" install --upgrade pip
 "$REPO_DIR/venv/bin/pip" install flask
 "$REPO_DIR/venv/bin/pip" install requests
+"$REPO_DIR/venv/bin/pip" install python-dotenv
+
 "$REPO_DIR/venv/bin/python" -c "import flask; print(flask.__version__)"
 
 #test "$REPO_DIR/venv/bin/python" "$REPO_DIR/website/app.py"
