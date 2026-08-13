@@ -16,9 +16,8 @@ python3 -m venv "$REPO_DIR/venv"
 
 #test "$REPO_DIR/venv/bin/python" "$REPO_DIR/website/app.py"
 
-# Add daily cron job at 03:05
-CRON_JOB="5 3 * * * bash $REPO_DIR/daily.sh"
-
+# Add twice daily cron
+CRON_JOB="5 3,15 * * * bash $REPO_DIR/cron.sh"
 (crontab -l 2>/dev/null | grep -F "$CRON_JOB") || (crontab -l 2>/dev/null; echo "$CRON_JOB") | crontab -
 
 echo "DONE"
