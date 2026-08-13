@@ -19,6 +19,9 @@ if [ $? -ne 0 ]; then
     notify "domain-lists: process_zones.py failed" "$(tail -n 50 "$REPO_DIR/zone_processing_log.txt" 2>/dev/null)"
 fi
 
+# generate trending keyword lists (needs today's new/all.txt.gz from process_zones.py)
+"$VENV/python" "$REPO_DIR/scripts/generate_keyword_lists.py"
+
 # cleanup (~9.6G)
 rm -rf "$REPO_DIR/downloads/"
 
