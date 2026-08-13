@@ -190,6 +190,19 @@ def validate_tld(tld):
     return tld
 
 
+def punycode_to_unicode(value):
+    """Render punycode (xn--) domains/TLDs as Unicode for display."""
+    if not value:
+        return value
+    try:
+        return value.lower().encode("ascii").decode("idna")
+    except (UnicodeError, ValueError):
+        return value
+
+
+app.jinja_env.filters["to_unicode"] = punycode_to_unicode
+
+
 # ==============================================================
 # Routes
 # ==============================================================
