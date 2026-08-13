@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # 1. download zone files
-/home/venv/bin/python /home/download_zones.py
+/home/venv/bin/python3 /home/download_zones.py
 
 # 2. compare with previous date and geenerate lists
 /home/venv/bin/python /home/process_zones.py
