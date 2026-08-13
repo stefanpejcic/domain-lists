@@ -452,7 +452,7 @@ Updated {{ data.last_updated }}
 {% block countdown_script %}
     const lastUpdated = new Date("{{ data.last_updated }}");
     const nextUpdate =
-        new Date(lastUpdated.getTime() + 24 * 60 * 60 * 1000);
+        new Date(lastUpdated.getTime() + 12 * 60 * 60 * 1000);
 
     function updateCountdown() {
 
