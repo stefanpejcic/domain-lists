@@ -8,7 +8,9 @@
 </script>
 {% endblock %}
 
-{% block content %}
+{% block main %}
+<main class="mx-auto max-w-7xl px-6 py-8 min-h-[calc(100vh-160px)] flex items-center justify-center">
+    {% block content %}
 
 <div
     class="max-w-xl mx-auto"
@@ -129,4 +131,6 @@
     </div>
 </div>
 
+    {% endblock %}
+</main>
 {% endblock %}
