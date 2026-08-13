@@ -22,6 +22,12 @@ fi
 # generate trending keyword lists (needs today's new/all.txt.gz from process_zones.py)
 "$VENV/python" "$REPO_DIR/scripts/generate_keyword_lists.py"
 
+# cross-reference today's new domains against threat intel feeds
+"$VENV/python" "$REPO_DIR/scripts/generate_threat_matches.py"
+
+# check today's trending keyword domains against the CT logs API (needs CT_LOGS in website/.env)
+"$VENV/python" "$REPO_DIR/scripts/generate_live_domains.py"
+
 # cleanup (~9.6G)
 rm -rf "$REPO_DIR/downloads/"
 
