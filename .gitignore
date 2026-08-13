@@ -14,4 +14,4 @@ info.json
 
 # sensitive info
 .env
-scripts/.env
+website/.env
