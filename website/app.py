@@ -480,7 +480,7 @@ def download_landing(tld):
         abort(404)
 
     if tld == "all":
-        display_tld = "all zones"
+        display_tld = ""
     else:
         if load_json(JSON_FOLDER / tld / "latest") is None:
             abort(404)
