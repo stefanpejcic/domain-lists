@@ -11,3 +11,7 @@ info.json
 
 # Logs written by the scripts
 *_log.txt
+
+# sensitive info
+.env
+scripts/.env
