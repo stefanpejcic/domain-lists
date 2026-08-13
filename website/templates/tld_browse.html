@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}.{{ data.tld }} {{ 'newly registered' if kind == 'new' else ('deleted' if kind == 'deleted' else 'all') }} domains — Domain Zone Data{% endblock %}
+{% block title %}.{{ data.tld_unicode }} {{ 'newly registered' if kind == 'new' else ('deleted' if kind == 'deleted' else 'all') }} domains — Domain Zone Data{% endblock %}
 
 {% block header_left %}
 <a href="{{ url_for('index') }}" class="text-sm text-gray-500 hover:text-gray-900">
