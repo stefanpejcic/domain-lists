@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}{{ 'newly registered' if kind == 'new' else ('deleted' if kind == 'deleted' else 'all') }} .{{ data.tld_unicode }} domains — Domain Zone Data{% endblock %}
+{% block title %}{{ 'newly registered' if kind == 'new' else ('deleted' if kind == 'deleted' else 'all') }} .{{ data.tld }} domains — Domain Zone Data{% endblock %}
 
 {% block header_left %}
 <a href="{{ url_for('index') }}" class="text-sm text-gray-500 hover:text-gray-900">
@@ -115,28 +115,28 @@ x-data="{
         <div class="max-w-3xl mx-auto text-center mb-10">
             <!-- Dynamic Heading -->
             <h1 class="mx-auto text-3xl font-bold text-gray-900 sm:text-4xl sm:leading-none sm:tracking-tight">
-                <span x-show="kind === 'domains' || kind === 'all'">List of all registered .{{ data.tld_unicode }} domains</span>
+                <span x-show="kind === 'domains' || kind === 'all'">List of all registered .{{ data.tld }} domains</span>
                 <template x-if="kind === 'new'">
-                    <span>List of newly registered .{{ data.tld_unicode }} domains</span>
+                    <span>List of newly registered .{{ data.tld }} domains</span>
                 </template>
                 <template x-if="kind === 'deleted'">
-                    <span>List of deleted .{{ data.tld_unicode }} domains</span>
+                    <span>List of deleted .{{ data.tld }} domains</span>
                 </template>
             </h1>
 
             <!-- Dynamic Subtitle -->
             <p class="mt-2 text-xl text-gray-600">
                 <span x-show="kind === 'domains' || kind === 'all'">
-                    Full list of <span class="font-bold">{{ "{:,}".format(data.domains) }}</span> registered .{{ data.tld_unicode }} domains.
+                    Full list of <span class="font-bold">{{ "{:,}".format(data.domains) }}</span> registered .{{ data.tld }} domains.
                 </span>
                 <template x-if="kind === 'new'">
                     <span>
-                        <span class="font-bold text-emerald-600">+{{ "{:,}".format(data.new) }}</span> .{{ data.tld_unicode }} domains newly registered in the last 24h.
+                        <span class="font-bold text-emerald-600">+{{ "{:,}".format(data.new) }}</span> .{{ data.tld }} domains newly registered in the last 24h.
                     </span>
                 </template>
                 <template x-if="kind === 'deleted'">
                     <span>
-                        <span class="font-bold text-red-600">-{{ "{:,}".format(data.deleted) }}</span> .{{ data.tld_unicode }} domains deleted in the last 24h.
+                        <span class="font-bold text-red-600">-{{ "{:,}".format(data.deleted) }}</span> .{{ data.tld }} domains deleted in the last 24h.
                     </span>
                 </template>
             </p>
@@ -157,7 +157,7 @@ x-data="{
                         <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5"></path>
                         <path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708z"></path>
                     </svg>
-                    <span>All .{{ data.tld_unicode }} domains {% if sizes.domains %}<span class="ml-1 text-xs text-gray-400">({{ sizes.domains | filesizeformat }})</span>{% endif %}</span>
+                    <span>All .{{ data.tld }} domains {% if sizes.domains %}<span class="ml-1 text-xs text-gray-400">({{ sizes.domains | filesizeformat }})</span>{% endif %}</span>
                 </a>
 
                 <!-- New Domains -->
@@ -174,7 +174,7 @@ x-data="{
                         <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5"></path>
                         <path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708z"></path>
                     </svg>
-                    <span>New .{{ data.tld_unicode }} {% if sizes.new %}<span class="ml-1 text-xs text-gray-400">({{ sizes.new | filesizeformat }})</span>{% endif %}</span>
+                    <span>New .{{ data.tld }} {% if sizes.new %}<span class="ml-1 text-xs text-gray-400">({{ sizes.new | filesizeformat }})</span>{% endif %}</span>
                 </a>
 
                 <!-- Deleted Domains -->
@@ -191,7 +191,7 @@ x-data="{
                         <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5"></path>
                         <path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708z"></path>
                     </svg>
-                    <span>Deleted .{{ data.tld_unicode }} {% if sizes.deleted %}<span class="ml-1 text-xs text-gray-400">({{ sizes.deleted | filesizeformat }})</span>{% endif %}</span>
+                    <span>Deleted .{{ data.tld }} {% if sizes.deleted %}<span class="ml-1 text-xs text-gray-400">({{ sizes.deleted | filesizeformat }})</span>{% endif %}</span>
                 </a>
             </div>
         </div>
@@ -387,7 +387,7 @@ x-data="{
     </h2>
 
     <p class="mt-2 text-sm leading-6 text-gray-500">
-        Daily domain zone data for .{{ data.tld_unicode }} and other TLDs is available through the downloadable zone lists below.
+        Daily domain zone data for .{{ data.tld }} and other TLDs is available through the downloadable zone lists below.
     </p>
 
     <!-- 2-Column Grid Layout -->
