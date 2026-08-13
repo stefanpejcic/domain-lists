@@ -35,13 +35,6 @@ VALID_PATTERNS = {
 # ==============================================================
 # Helpers
 # ==============================================================
-def unicode_domain(domain):
-    """Convert an IDN/Punycode domain to its Unicode representation."""
-    try:
-        return domain.encode("ascii").decode("idna")
-    except (UnicodeError, UnicodeEncodeError):
-        return domain
-
 def load_json(filename):
     try:
         with open(filename, "r", encoding="utf-8") as f:
@@ -83,6 +76,8 @@ def load_tlds():
         info = load_json(folder / "info.json")
         if info:
             data = {**data, "info": info}
+
+        tlds.append(data)
 
     return sorted(tlds, key=lambda x: x.get("tld", ""))
 
@@ -173,7 +168,7 @@ def browse_domains_from_path(path, search, page):
                 continue
 
             if matched_count >= start and matched_count < end:
-                results.append(unicode_domain(domain))
+                results.append(domain)
             matched_count += 1
 
             if matched_count >= end:
@@ -214,10 +209,6 @@ def index():
         }
 
     tlds = load_tlds()
-
-    for tld in tlds:
-        tld["tld_unicode"] = unicode_domain(tld.get("tld", ""))
-        
     return render_template(
         "index.html",
         sizes=sizes,
@@ -365,10 +356,9 @@ def tld_browse_page(tld, slug):
     data = load_json(latest_file)
     if data is None:
         abort(404)
-    data["tld_unicode"] = unicode_domain(data.get("tld", ""))
 
     sizes = get_download_sizes(tld)
-    
+
     return render_template(
         "tld_browse.html",
         data=data,
