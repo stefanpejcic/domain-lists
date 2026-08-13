@@ -14,7 +14,6 @@ VENV="$REPO_DIR/venv/bin"
 
 # todo: generate counters and distribution
 
-
 # 4. cleanup (~9.6G)
 rm -rf "$REPO_DIR/downloads/"
 
