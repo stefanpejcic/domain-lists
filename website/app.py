@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
+import csv
+import io
 import json
 import gzip
 import time
 import uuid
 import threading
 from pathlib import Path
-from flask import Flask, render_template, abort, send_file, request, jsonify
+from flask import Flask, render_template, abort, send_file, request, jsonify, Response
 
 app = Flask(__name__)
 
@@ -525,6 +527,53 @@ def download_file(token):
 
 
 # ==============================================================
+# Dropped domains: deleted-today domains, combined across all TLDs
+#
+# process_zones.py already writes lists/<date>/deleted/all.txt.gz
+# as part of its daily combine step, and the download-token flow
+# already supports {type: 'tld', tld: 'all', kind: 'deleted'}, so
+# this just adds a dedicated browse page for that existing file.
+# ==============================================================
+@app.route("/dropped")
+def dropped():
+    summary = load_summary()
+    if summary is None:
+        abort(404)
+
+    sizes = get_download_sizes("all")
+    date = latest_date_with_domains("all")
+
+    return render_template(
+        "dropped.html",
+        summary=summary,
+        sizes=sizes,
+        date=date,
+    )
+
+
+@app.route("/dropped/browse")
+def browse_dropped():
+    search = request.args.get("search", "")
+    try:
+        page = max(1, int(request.args.get("page", 1)))
+    except ValueError:
+        page = 1
+
+    date = latest_date_with_domains("all")
+    if date is None:
+        return jsonify({"domains": [], "has_more": False, "page": page})
+
+    domains, has_more, matched_count = browse_domains("all", date, "deleted", search, page)
+
+    return jsonify({
+        "domains": domains,
+        "has_more": has_more,
+        "page": page,
+        "per_page": DOMAINS_PER_PAGE,
+    })
+
+
+# ==============================================================
 # Domain Pattern Availability
 # ==============================================================
 @app.route("/patterns")
@@ -548,6 +597,124 @@ def pattern_availability():
         tlds=data.get("tlds", {}),
         patterns=data.get("patterns", {}),
     )
+
+# ==============================================================
+# JSON/CSV API
+#
+# For scripts/automation: no captcha/countdown, just a simple
+# per-IP rate limit. Read-only, reuses the same on-disk lists the
+# browser download flow already serves.
+# ==============================================================
+API_RATE_LIMIT = 60   # requests
+API_RATE_WINDOW = 60  # seconds
+
+_api_rate_buckets = {}
+_api_rate_lock = threading.Lock()
+
+
+def _client_ip():
+    forwarded = request.headers.get("X-Forwarded-For", "")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.remote_addr or "unknown"
+
+
+@app.before_request
+def _enforce_api_rate_limit():
+    if not request.path.startswith("/api/"):
+        return None
+
+    ip = _client_ip()
+    now = time.time()
+
+    with _api_rate_lock:
+        bucket = _api_rate_buckets.setdefault(ip, [])
+        bucket[:] = [t for t in bucket if now - t < API_RATE_WINDOW]
+        if len(bucket) >= API_RATE_LIMIT:
+            return jsonify({
+                "error": f"Rate limit exceeded: max {API_RATE_LIMIT} requests per {API_RATE_WINDOW}s"
+            }), 429
+        bucket.append(now)
+
+    return None
+
+
+@app.route("/api/v1")
+def api_index():
+    return jsonify({
+        "endpoints": {
+            "/api/v1/summary": "Global stats: total domains/new/deleted/tlds",
+            "/api/v1/tlds": "Stats for every TLD (add ?format=csv for CSV)",
+            "/api/v1/tld/<tld>": "Stats for a single TLD",
+            "/api/v1/tld/<tld>/<kind>": (
+                "Direct .txt.gz download; kind is one of domains, new, "
+                "deleted. Use tld=all for every TLD combined."
+            ),
+        },
+        "rate_limit": f"{API_RATE_LIMIT} requests / {API_RATE_WINDOW}s per IP",
+    })
+
+
+@app.route("/api/v1/summary")
+def api_summary():
+    summary = load_summary()
+    if summary is None:
+        return jsonify({"error": "No data yet"}), 404
+    return jsonify(summary)
+
+
+@app.route("/api/v1/tlds")
+def api_tlds():
+    tlds = get_cached_tlds()
+
+    if request.args.get("format") == "csv":
+        buf = io.StringIO()
+        writer = csv.writer(buf)
+        writer.writerow(["tld", "domains", "new", "deleted", "last_updated"])
+        for t in tlds:
+            writer.writerow([
+                t.get("tld"), t.get("domains"), t.get("new"),
+                t.get("deleted"), t.get("last_updated"),
+            ])
+        return Response(
+            buf.getvalue(),
+            mimetype="text/csv",
+            headers={"Content-Disposition": "attachment; filename=tlds.csv"},
+        )
+
+    return jsonify(tlds)
+
+
+@app.route("/api/v1/tld/<tld>")
+def api_tld(tld):
+    tld = validate_tld(tld)
+    data = load_json(JSON_FOLDER / tld / "latest")
+    if data is None:
+        return jsonify({"error": "Unknown TLD"}), 404
+    return jsonify(data)
+
+
+@app.route("/api/v1/tld/<tld>/<kind>")
+def api_tld_download(tld, kind):
+    tld = validate_tld(tld)
+    if kind not in DOWNLOAD_KINDS:
+        abort(404)
+
+    date = latest_date_with_domains(tld)
+    if date is None:
+        return jsonify({"error": "File not available"}), 404
+
+    file_path = LISTS_FOLDER / date / kind / f"{tld}.txt.gz"
+    if not file_path.exists():
+        return jsonify({"error": "File not available"}), 404
+
+    return send_file(
+        file_path,
+        as_attachment=True,
+        download_name=f"{tld}-{kind}-{date}.txt.gz",
+        mimetype="application/gzip",
+    )
+
 
 # ==============================================================
 # Run

@@ -13,16 +13,38 @@ domain-lists/
 │   ├── process_zones.py
 │   ├── generate_distribution.py
 │   ├── extract_short_domains.py
-│   └── tld_scrapper.py
+│   ├── tld_scrapper.py
+│   └── notify.py       # sends a failure alert email (reads EMAIL from website/.env)
 └── website/
-    ├── app.py
+    ├── app.py           # also exposes /api/v1/* (JSON/CSV, rate-limited)
+    ├── .env              # EMAIL=... (gitignored)
     └── templates/
         ├── base.html          # shared header/footer/layout
         ├── index.html
         ├── deleted_browse.html
         ├── tld_browse.html
+        ├── dropped.html        # combined "deleted today" browse page
         └── patterns.html
 ```
+
+### API
+
+`/api/v1` lists available endpoints. Unlike the browser download flow (which
+gates files behind a captcha/countdown and single-use tokens), the API is
+meant for scripts: no token dance, just a 60 requests/minute per-IP limit.
+
+- `GET /api/v1/summary` — global totals
+- `GET /api/v1/tlds` (or `?format=csv`) — stats for every TLD
+- `GET /api/v1/tld/<tld>` — stats for one TLD
+- `GET /api/v1/tld/<tld>/<kind>` — direct `.txt.gz` download (`kind` is
+  `domains`, `new`, or `deleted`; `tld=all` combines every TLD)
+
+### Failure alerts
+
+`cron.sh` checks the exit code of `download_zones.py` and `process_zones.py`
+and, on failure, calls `scripts/notify.py` to email the tail of the relevant
+log via the local `sendmail`. The recipient is read from `EMAIL` in
+`website/.env` (falls back to `stefan@pejcic.rs` if unset).
 
 All paths in `scripts/` and `website/app.py` are resolved relative to the
 repo root, so the app works regardless of where it's installed/cloned.
