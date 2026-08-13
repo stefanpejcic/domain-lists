@@ -4,18 +4,25 @@ Cross-reference today's newly registered domains (lists/<date>/new/all.txt.gz,
 produced by process_zones.py) against public threat-intel feeds to flag
 domains that are newly registered AND already known-malicious.
 
-Feeds used (both free, public, no API key required):
-- OpenPhish community feed:
+Feeds used:
+- OpenPhish community feed (free, public, no API key):
   https://raw.githubusercontent.com/openphish/public_feed/main/feed.txt
-- URLhaus plain-text feed:
+- URLhaus plain-text feed (free, public, no API key):
   https://urlhaus.abuse.ch/downloads/text/
+- Google Safe Browsing v4 threatMatches:find (needs G_API_KEY in
+  website/.env - skipped entirely if unset)
 
-Matching: each feed entry is a full URL. We extract its hostname and walk
-its dot-suffixes (evil.sub.example.co.uk -> example.co.uk -> co.uk...)
-against the set of today's new domains, taking the first (most specific)
-hit. This avoids needing a public-suffix-list - if "example.co.uk" is
-what actually got registered, that's exactly what's in our own domain
-set, so no TLD-structure guessing is required.
+OpenPhish/URLhaus matching: each feed entry is a full URL. We extract its
+hostname and walk its dot-suffixes (evil.sub.example.co.uk ->
+example.co.uk -> co.uk...) against the set of today's new domains, taking
+the first (most specific) hit. This avoids needing a public-suffix-list -
+if "example.co.uk" is what actually got registered, that's exactly what's
+in our own domain set, so no TLD-structure guessing is required.
+
+Safe Browsing matching: unlike the feeds above, we submit our own domains
+TO Google (up to 500 URLs per request - its documented batch limit) and
+it tells us which are flagged, so matches are exact, not suffix-derived.
+This lets it check ALL of today's new domains, not just a scoped subset.
 
 Standalone - run this from the terminal (or your own cron entry) after
 process_zones.py has produced today's new/all.txt.gz.
@@ -35,10 +42,13 @@ from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
 import requests
+from dotenv import load_dotenv
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 LISTS_FOLDER = REPO_ROOT / "lists"
 JSON_FOLDER = REPO_ROOT / "json"
+
+load_dotenv(REPO_ROOT / "website" / ".env")
 
 TIMEZONE_NAME = "Europe/Belgrade"
 TIMEZONE = ZoneInfo(TIMEZONE_NAME)
@@ -50,6 +60,13 @@ FEEDS = {
 
 HEADERS = {"User-Agent": "domain-lists-threat-check/1.0"}
 REQUEST_TIMEOUT = 30
+
+SAFEBROWSING_ENDPOINT = "https://safebrowsing.googleapis.com/v4/threatMatches:find"
+SAFEBROWSING_BATCH_SIZE = 500  # Google's documented max URLs per request
+SAFEBROWSING_CLIENT = {"clientId": "domain-lists", "clientVersion": "1.0"}
+SAFEBROWSING_THREAT_TYPES = [
+    "MALWARE", "SOCIAL_ENGINEERING", "UNWANTED_SOFTWARE", "POTENTIALLY_HARMFUL_APPLICATION",
+]
 
 
 def fetch_feed(url):
@@ -104,6 +121,48 @@ def match_domain(hostname, domain_set):
     return None
 
 
+def check_safebrowsing(domains, api_key):
+    """Query Google Safe Browsing in batches of up to 500 URLs; return the flagged subset."""
+    domains = sorted(domains)
+    flagged = set()
+
+    batch_count = (len(domains) + SAFEBROWSING_BATCH_SIZE - 1) // SAFEBROWSING_BATCH_SIZE
+    print(f"safebrowsing: checking {len(domains):,} domains in {batch_count:,} batches")
+
+    for i in range(0, len(domains), SAFEBROWSING_BATCH_SIZE):
+        batch = domains[i:i + SAFEBROWSING_BATCH_SIZE]
+        payload = {
+            "client": SAFEBROWSING_CLIENT,
+            "threatInfo": {
+                "threatTypes": SAFEBROWSING_THREAT_TYPES,
+                "platformTypes": ["ANY_PLATFORM"],
+                "threatEntryTypes": ["URL"],
+                "threatEntries": [{"url": f"http://{d}"} for d in batch],
+            },
+        }
+
+        try:
+            resp = requests.post(
+                SAFEBROWSING_ENDPOINT,
+                params={"key": api_key},
+                json=payload,
+                timeout=REQUEST_TIMEOUT,
+            )
+            resp.raise_for_status()
+        except requests.RequestException as e:
+            batch_num = i // SAFEBROWSING_BATCH_SIZE + 1
+            print(f"safebrowsing: batch {batch_num}/{batch_count} FAILED - {e}", file=sys.stderr)
+            continue
+
+        for match in resp.json().get("matches", []):
+            url = match.get("threat", {}).get("url", "")
+            host = urlparse(url).hostname
+            if host:
+                flagged.add(host.lower().rstrip("."))
+
+    return flagged
+
+
 def write_domain_list(domains, out_file):
     out_file.parent.mkdir(parents=True, exist_ok=True)
     tmp = Path(str(out_file) + ".tmp")
@@ -154,6 +213,24 @@ def main():
         out_file = out_folder / f"{source}.txt.gz"
         write_domain_list(matched, out_file)
         print(f"{source}: {len(matched):,} matches -> {out_file}")
+
+    api_key = os.getenv("G_API_KEY", "").strip()
+    if api_key:
+        try:
+            matched = check_safebrowsing(new_domains, api_key)
+        except Exception as e:
+            print(f"safebrowsing: FAILED - {e}", file=sys.stderr)
+            matched = set()
+
+        matches_by_source["safebrowsing"] = matched
+        all_matches |= matched
+
+        out_file = out_folder / "safebrowsing.txt.gz"
+        write_domain_list(matched, out_file)
+        print(f"safebrowsing: {len(matched):,} matches -> {out_file}")
+    else:
+        print("safebrowsing: skipped (G_API_KEY not configured)")
+        matches_by_source["safebrowsing"] = set()
 
     all_file = out_folder / "all.txt.gz"
     write_domain_list(all_matches, all_file)

@@ -58,6 +58,7 @@ THREAT_SOURCES = {
     "all": "All Sources",
     "openphish": "OpenPhish",
     "urlhaus": "URLhaus",
+    "safebrowsing": "Google Safe Browsing",
 }
 
 
