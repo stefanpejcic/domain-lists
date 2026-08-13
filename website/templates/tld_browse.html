@@ -17,59 +17,94 @@ Last update: <span class="font-medium text-gray-900">{{ data.last_updated }}</sp
 {% block main %}
     <main
         class="md:pt-10 px-4 mx-auto max-w-7xl md:px-6 lg:px-8 pb-8"
-        x-data="{
-            domains: [],
-            search: '',
-            kind: '{{ kind }}',
-            page: 1,
-            hasMore: false,
-            loading: false,
-            matchedCount: 0,
+x-data="{
+    domains: [],
+    search: '',
+    kind: '{{ kind }}',
+    page: 1,
+    hasMore: false,
+    loading: false,
+    matchedCount: 0,
 
-            init() {
-                this.load();
-            },
+    cache: {},
 
-            load() {
-                this.loading = true;
-                const params = new URLSearchParams({
-                    kind: this.kind,
-                    search: this.search,
-                    page: this.page,
-                });
-                fetch('/tld/{{ data.tld }}/browse?' + params.toString())
-                    .then(r => r.json())
-                    .then(data => {
-                        this.domains = data.domains;
-                        this.hasMore = data.has_more;
-                        this.loading = false;
-                    });
-            },
+    init() {
+        this.load();
+    },
 
-            switchKind(newKind) {
-                if (this.kind === newKind) return;
-                this.kind = newKind;
-                this.page = 1;
-                this.load();
-            },
+    cacheKey() {
+        return this.kind + '|' + this.page + '|' + this.search;
+    },
 
-            doSearch() {
-                this.page = 1;
-                this.load();
-            },
+    load() {
+        const key = this.cacheKey();
 
-            nextPage() {
-                if (!this.hasMore) return;
-                this.page += 1;
-                this.load();
-            },
+        // Already fetched — use cached result
+        if (this.cache[key]) {
+            const cached = this.cache[key];
 
-            prevPage() {
-                if (this.page <= 1) return;
-                this.page -= 1;
-                this.load();
-            }
-        }"
+            this.domains = cached.domains;
+            this.hasMore = cached.hasMore;
+            this.loading = false;
+
+            return;
+        }
+
+        this.loading = true;
+
+        const params = new URLSearchParams({
+            kind: this.kind,
+            search: this.search,
+            page: this.page,
+        });
+
+        fetch('/tld/{{ data.tld }}/browse?' + params.toString())
+            .then(r => r.json())
+            .then(data => {
+                this.domains = data.domains;
+                this.hasMore = data.has_more;
+                this.loading = false;
+
+                // Cache this result
+                this.cache[key] = {
+                    domains: data.domains,
+                    hasMore: data.has_more
+                };
+            })
+            .catch(() => {
+                this.loading = false;
+            });
+    },
+
+    switchKind(newKind) {
+        if (this.kind === newKind) return;
+
+        this.kind = newKind;
+        this.page = 1;
+
+        // load() will use cache if this kind was already fetched
+        this.load();
+    },
+
+    doSearch() {
+        this.page = 1;
+        this.load();
+    },
+
+    nextPage() {
+        if (!this.hasMore) return;
+
+        this.page += 1;
+        this.load();
+    },
+
+    prevPage() {
+        if (this.page <= 1) return;
+
+        this.page -= 1;
+        this.load();
+    }
+}"
     >
         {{ self.content() }}
     </main>
