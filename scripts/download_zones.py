@@ -5,6 +5,9 @@ import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 import json
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # ---------------------------------------
 # 1. Authenticate and get CZDS API token
@@ -12,8 +15,12 @@ import json
 
 AUTH_URL = "https://account-api.icann.org/api/authenticate"
 
-USERNAME = ""
-PASSWORD = ""
+USERNAME = os.getenv("CZDS_USERNAME")
+PASSWORD = os.getenv("CZDS_PASSWORD")
+
+if not USERNAME or not PASSWORD:
+    print("Error: CZDS_USERNAME and CZDS_PASSWORD must be set in .env")
+    sys.exit(1)
 
 auth_payload = {
     "username": USERNAME,
