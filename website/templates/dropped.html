@@ -12,7 +12,7 @@
 Last update: <span class="font-medium text-gray-900">{{ summary.last_updated }}</span>, next update in <span id="next-update" class="font-medium text-gray-900">calculating...</span>
 {% endblock %}
 
-{% block footer %}{% endblock %}
+{% block description %}Download recently dropped domains — {{ "{:,}".format(summary.deleted) }} domains removed from zone files in the last 24h across {{ "{:,}".format(summary.tlds) }} TLDs. Useful for drop-catching and domain research.{% endblock %}
 
 {% block main %}
     <main

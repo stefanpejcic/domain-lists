@@ -12,7 +12,7 @@
 Last update: <span class="font-medium text-gray-900">{{ data.last_updated }}</span>, next update in <span id="next-update" class="font-medium text-gray-900">calculating...</span>
 {% endblock %}
 
-{% block footer %}{% endblock %}
+{% block description %}Download the full list of .{{ data.tld | to_unicode }} domains — {{ "{:,}".format(data.domains) }} registered, updated daily with new and deleted domains tracked.{% endblock %}
 
 {% block main %}
     <main

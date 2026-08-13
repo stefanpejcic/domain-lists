@@ -1,5 +1,9 @@
 {% extends "base.html" %}
 
+{% block title %}Domain Zone Data — Download Domain Lists for {{ "{:,}".format(summary.tlds) }} TLDs{% endblock %}
+
+{% block description %}Download a free list of {{ "{:,}".format(summary.domains) }} registered domains across {{ "{:,}".format(summary.tlds) }} TLDs, updated daily. Includes newly registered and deleted domain lists for every zone.{% endblock %}
+
 {% block body_data %}
 <script id="tlds-data" type="application/json">
 {{ tlds | tojson }}

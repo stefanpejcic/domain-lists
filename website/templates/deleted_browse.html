@@ -21,7 +21,7 @@
 {% endif %}
 {% endblock %}
 
-{% block footer %}{% endblock %}
+{% block description %}{% if pattern_type %}Browse and download deleted domains matching the {{ pattern_label }} pattern — a curated feed of short, premium-style dropped domains.{% else %}Browse deleted domains grouped by short-name pattern: one-letter, two-letter, one-word and more — ideal for finding premium dropped domains.{% endif %}{% endblock %}
 
 {% block main %}
     <main class="md:pt-10 px-4 mx-auto max-w-7xl md:px-6 lg:px-8 pb-8">

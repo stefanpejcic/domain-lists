@@ -240,6 +240,12 @@ def punycode_to_unicode(value):
 app.jinja_env.filters["to_unicode"] = punycode_to_unicode
 
 
+@app.context_processor
+def inject_current_year():
+    from datetime import datetime
+    return {"current_year": datetime.now().year}
+
+
 # ==============================================================
 # Routes
 # ==============================================================

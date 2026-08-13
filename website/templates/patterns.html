@@ -2,6 +2,8 @@
 
 {% block title %}Domain Pattern Availability — Domain Zone Data{% endblock %}
 
+{% block description %}Check availability of one-letter, two-letter, three-letter, numeric, and one-word domains across every TLD — updated daily from live zone data.{% endblock %}
+
 {% block body_data %}
 <script id="patterns-data" type="application/json">
 {{ tlds | tojson }}
