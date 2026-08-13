@@ -421,13 +421,14 @@ def browse_tld_domains(tld):
 
 
 # ==============================================================
-# Guarded browser downloads: captcha landing page + single-use links
+# Guarded browser downloads: single-use links
 #
-# There is no direct/permanent download URL. Browser users land on a
-# page that (eventually) makes them pass a captcha and a short
-# countdown, which then hands them a randomized, one-time-use download
-# link that can never be reused. A future API will offer key-based
-# direct access; until then this is the only way to get a file.
+# There is no direct/permanent download URL. Each page embeds its own
+# "download" section (see templates/_download_section.html) that
+# (eventually) makes the user pass a captcha and a short countdown,
+# then hands them a randomized, one-time-use download link that can
+# never be reused. A future API will offer key-based direct access;
+# until then this is the only way to get a file.
 # ==============================================================
 def _resolve_download_spec(spec):
     """Resolve a token spec to (file_path, download_name, mimetype), or None."""
@@ -469,64 +470,6 @@ def _cleanup_download_tokens():
     now = time.time()
     for token in [t for t, spec in _download_tokens.items() if spec["expires"] < now]:
         _download_tokens.pop(token, None)
-
-
-@app.route("/download/deleted/<pattern_type>")
-def download_pattern_landing(pattern_type):
-    pattern_type = pattern_type.lower().strip()
-    if pattern_type not in VALID_PATTERNS:
-        abort(404)
-
-    date = latest_date_with_pattern(pattern_type)
-    if not date:
-        abort(404)
-
-    file_path = LISTS_FOLDER / date / pattern_type / "deleted.txt.gz"
-    if not file_path.exists():
-        abort(404)
-
-    return render_template(
-        "download.html",
-        heading=f"Download deleted domains — {VALID_PATTERNS[pattern_type]}",
-        file_size=file_path.stat().st_size,
-        payload={"type": "pattern", "pattern_type": pattern_type},
-    )
-
-
-@app.route("/download/<tld>")
-def download_landing(tld):
-    tld = tld.lower().strip()
-    if "/" in tld or "\\" in tld or "." in tld:
-        abort(404)
-
-    kind = request.args.get("kind", "domains")
-    if kind not in DOWNLOAD_KINDS:
-        abort(404)
-
-    if tld == "all":
-        display_tld = ""
-    else:
-        if load_json(JSON_FOLDER / tld / "latest") is None:
-            abort(404)
-        display_tld = "." + punycode_to_unicode(tld)
-
-    sizes = get_download_sizes(tld)
-    file_size = sizes.get(kind)
-    if file_size is None:
-        abort(404)
-
-    kind_label = {
-        "domains": "all registered",
-        "new": "newly registered",
-        "deleted": "deleted",
-    }[kind]
-
-    return render_template(
-        "download.html",
-        heading=f"Download {kind_label} {display_tld} domains",
-        file_size=file_size,
-        payload={"type": "tld", "tld": tld, "kind": kind},
-    )
 
 
 @app.route("/download/prepare", methods=["POST"])

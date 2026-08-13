@@ -36,6 +36,82 @@
         }
     </script>
 
+    <style>[x-cloak] { display: none !important; }</style>
+
+    <!--
+        Shared "download" flow, used by the embedded download section on
+        every page (see templates/_download_section.html). A page calls
+        Alpine.store('download').open(payload, heading) from a download
+        link/button; the section reveals itself, jumps the URL to
+        #download, and walks the user through the (future) captcha +
+        countdown before handing them a single-use file link.
+    -->
+    <script>
+        document.addEventListener('alpine:init', () => {
+            Alpine.store('download', {
+                step: 'idle',
+                count: 5,
+                error: '',
+                timer: null,
+                downloadUrl: null,
+                payload: null,
+                heading: '',
+
+                open(payload, heading) {
+                    if (this.timer) clearInterval(this.timer);
+
+                    this.payload = payload;
+                    this.heading = heading;
+                    this.step = 'idle';
+                    this.count = 5;
+                    this.error = '';
+                    this.downloadUrl = null;
+
+                    window.location.hash = 'download';
+
+                    requestAnimationFrame(() => {
+                        const el = document.getElementById('download-section');
+                        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    });
+                },
+
+                verify() {
+                    if (this.step !== 'idle' || !this.payload) return;
+                    this.step = 'verifying';
+
+                    fetch('/download/prepare', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(this.payload)
+                    })
+                    .then(r => {
+                        if (!r.ok) throw new Error('unavailable');
+                        return r.json();
+                    })
+                    .then(data => {
+                        this.downloadUrl = '/download/file/' + data.token;
+                        this.step = 'counting';
+                        this.count = 5;
+
+                        this.timer = setInterval(() => {
+                            this.count -= 1;
+
+                            if (this.count <= 0) {
+                                clearInterval(this.timer);
+                                this.step = 'ready';
+                                window.location.href = this.downloadUrl;
+                            }
+                        }, 1000);
+                    })
+                    .catch(() => {
+                        this.step = 'error';
+                        this.error = 'This file is currently unavailable. Please try again later.';
+                    });
+                }
+            });
+        });
+    </script>
+
     <!-- Punycode -> Unicode decoding for display purposes only (links keep punycode) -->
     <script>
         function punycodeDecode(input) {

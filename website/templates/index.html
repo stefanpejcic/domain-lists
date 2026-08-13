@@ -55,7 +55,8 @@
 <div class="inline-flex mt-6 p-1 bg-gray-200 rounded-lg">
     <!-- Total / All Domains -->
     <a
-        href="{{ url_for('download_landing', tld='all', kind='domains') }}"
+        href="#download"
+        @click.prevent="$store.download.open({type: 'tld', tld: 'all', kind: 'domains'}, 'Download all domains')"
         @mouseenter="kind = 'domains'; $dispatch('sort-table', { column: 'domains' })"
         :class="{
             'bg-white shadow text-gray-900': kind === 'domains',
@@ -72,7 +73,8 @@
 
     <!-- New Domains -->
     <a
-        href="{{ url_for('download_landing', tld='all', kind='new') }}"
+        href="#download"
+        @click.prevent="$store.download.open({type: 'tld', tld: 'all', kind: 'new'}, 'Download domains registered today')"
         @mouseenter="kind = 'new'; $dispatch('sort-table', { column: 'new' })"
         :class="{
             'bg-white shadow text-gray-900': kind === 'new',
@@ -89,7 +91,8 @@
 
     <!-- Deleted Domains -->
     <a
-        href="{{ url_for('download_landing', tld='all', kind='deleted') }}"
+        href="#download"
+        @click.prevent="$store.download.open({type: 'tld', tld: 'all', kind: 'deleted'}, 'Download domains deleted today')"
         @mouseenter="kind = 'deleted'; $dispatch('sort-table', { column: 'deleted' })"
         :class="{
             'bg-white shadow text-gray-900': kind === 'deleted',
@@ -108,6 +111,7 @@
 
 </div>
 
+{% include "_download_section.html" %}
 
         <!-- TLD list -->
 <div
@@ -338,17 +342,32 @@
             <td class="px-5 py-4 text-right">
                 <div class="flex items-center justify-end gap-2">
 
-                    <a :href="'/download/' + tld.tld + '?kind=domains'" :title="'Download list of all .' + toUnicode(tld.tld) + ' domains'" class="rounded-lg bg-gray-100 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-200 items-center gap-2 flex">
+                    <a
+                        href="#download"
+                        @click.prevent="$store.download.open({type: 'tld', tld: tld.tld, kind: 'domains'}, 'Download all .' + toUnicode(tld.tld) + ' domains')"
+                        :title="'Download list of all .' + toUnicode(tld.tld) + ' domains'"
+                        class="rounded-lg bg-gray-100 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-200 items-center gap-2 flex"
+                    >
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-download" viewBox="0 0 16 16"><path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5"></path><path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708z"></path></svg>
 						All
                     </a>
 
-                    <a :href="'/download/' + tld.tld + '?kind=new'" :title="'Download list of new .' + toUnicode(tld.tld) + ' domains'" class="rounded-lg bg-emerald-50 px-2.5 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-100 items-center gap-2 flex">
+                    <a
+                        href="#download"
+                        @click.prevent="$store.download.open({type: 'tld', tld: tld.tld, kind: 'new'}, 'Download new .' + toUnicode(tld.tld) + ' domains')"
+                        :title="'Download list of new .' + toUnicode(tld.tld) + ' domains'"
+                        class="rounded-lg bg-emerald-50 px-2.5 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-100 items-center gap-2 flex"
+                    >
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-download" viewBox="0 0 16 16"><path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5"></path><path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708z"></path></svg>
 						New
                     </a>
 
-                    <a :href="'/download/' + tld.tld + '?kind=deleted'" :title="'Download list of deleted .' + toUnicode(tld.tld) + ' domains'" class="rounded-lg bg-red-50 px-2.5 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100 items-center gap-2 flex">
+                    <a
+                        href="#download"
+                        @click.prevent="$store.download.open({type: 'tld', tld: tld.tld, kind: 'deleted'}, 'Download deleted .' + toUnicode(tld.tld) + ' domains')"
+                        :title="'Download list of deleted .' + toUnicode(tld.tld) + ' domains'"
+                        class="rounded-lg bg-red-50 px-2.5 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100 items-center gap-2 flex"
+                    >
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-download" viewBox="0 0 16 16"><path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5"></path><path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708z"></path></svg>
                         Deleted
                     </a>
@@ -380,222 +399,6 @@
                 </template>
 
             </div>
-
-
-
-
-<div class="mt-8 rounded-xl border bg-white p-6 shadow-sm">
-
-    <h2 class="text-lg font-semibold text-gray-900">
-        Download Zone Data
-    </h2>
-
-    <p class="mt-2 text-sm leading-6 text-gray-500">
-        Daily domain zone data for {{ "{:,}".format(summary.tlds) }} TLDs is available through the downloadable zone lists below.
-    </p>
-
-    <!-- 2-Column Grid Layout -->
-    <div class="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
-
-        <!-- Column 1: All zones combined -->
-        <div class="flex flex-col gap-3 text-sm">
-            <span class="font-medium text-gray-900">All zones combined</span>
-
-            <!-- Block 1: All domains -->
-            <div x-data="{
-                copied: false,
-                copyText(text) {
-                    if (navigator.clipboard && window.isSecureContext) {
-                        navigator.clipboard.writeText(text);
-                    } else {
-                        const textarea = document.createElement('textarea');
-                        textarea.value = text;
-                        textarea.style.position = 'fixed';
-                        textarea.style.opacity = '0';
-                        document.body.appendChild(textarea);
-                        textarea.focus();
-                        textarea.select();
-                        try { document.execCommand('copy'); } catch (err) {}
-                        document.body.removeChild(textarea);
-                    }
-                    this.copied = true;
-                    setTimeout(() => this.copied = false, 2000);
-                }
-            }" class="flex items-center gap-2">
-                <pre class="flex-1 overflow-x-auto rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 font-mono text-xs text-gray-800"><code>{{ request.host_url.rstrip('/') }}{{ url_for('download_landing', tld='all', kind='domains') }}</code></pre>
-                <button
-                    type="button"
-                    @click="copyText($el.parentElement.querySelector('code').textContent.trim())"
-                    class="rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-sky-500"
-                >
-                    <span x-text="copied ? 'Copied!' : 'Copy'"></span>
-                </button>
-            </div>
-
-            <!-- Block 2: New domains -->
-            <div x-data="{
-                copied: false,
-                copyText(text) {
-                    if (navigator.clipboard && window.isSecureContext) {
-                        navigator.clipboard.writeText(text);
-                    } else {
-                        const textarea = document.createElement('textarea');
-                        textarea.value = text;
-                        textarea.style.position = 'fixed';
-                        textarea.style.opacity = '0';
-                        document.body.appendChild(textarea);
-                        textarea.focus();
-                        textarea.select();
-                        try { document.execCommand('copy'); } catch (err) {}
-                        document.body.removeChild(textarea);
-                    }
-                    this.copied = true;
-                    setTimeout(() => this.copied = false, 2000);
-                }
-            }" class="flex items-center gap-2">
-                <pre class="flex-1 overflow-x-auto rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 font-mono text-xs text-gray-800"><code>{{ request.host_url.rstrip('/') }}{{ url_for('download_landing', tld='all', kind='new') }}</code></pre>
-                <button
-                    type="button"
-                    @click="copyText($el.parentElement.querySelector('code').textContent.trim())"
-                    class="rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-sky-500"
-                >
-                    <span x-text="copied ? 'Copied!' : 'Copy'"></span>
-                </button>
-            </div>
-
-            <!-- Block 3: Deleted domains -->
-            <div x-data="{
-                copied: false,
-                copyText(text) {
-                    if (navigator.clipboard && window.isSecureContext) {
-                        navigator.clipboard.writeText(text);
-                    } else {
-                        const textarea = document.createElement('textarea');
-                        textarea.value = text;
-                        textarea.style.position = 'fixed';
-                        textarea.style.opacity = '0';
-                        document.body.appendChild(textarea);
-                        textarea.focus();
-                        textarea.select();
-                        try { document.execCommand('copy'); } catch (err) {}
-                        document.body.removeChild(textarea);
-                    }
-                    this.copied = true;
-                    setTimeout(() => this.copied = false, 2000);
-                }
-            }" class="flex items-center gap-2">
-                <pre class="flex-1 overflow-x-auto rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 font-mono text-xs text-gray-800"><code>{{ request.host_url.rstrip('/') }}{{ url_for('download_landing', tld='all', kind='deleted') }}</code></pre>
-                <button
-                    type="button"
-                    @click="copyText($el.parentElement.querySelector('code').textContent.trim())"
-                    class="rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-sky-500"
-                >
-                    <span x-text="copied ? 'Copied!' : 'Copy'"></span>
-                </button>
-            </div>
-        </div>
-
-        <!-- Column 2: Individual zones -->
-        <div class="flex flex-col gap-3 text-sm">
-            <span class="font-medium text-gray-900">Individual zones</span>
-
-            <!-- Block 4: Per TLD domains -->
-            <div x-data="{
-                copied: false,
-                copyText(text) {
-                    if (navigator.clipboard && window.isSecureContext) {
-                        navigator.clipboard.writeText(text);
-                    } else {
-                        const textarea = document.createElement('textarea');
-                        textarea.value = text;
-                        textarea.style.position = 'fixed';
-                        textarea.style.opacity = '0';
-                        document.body.appendChild(textarea);
-                        textarea.focus();
-                        textarea.select();
-                        try { document.execCommand('copy'); } catch (err) {}
-                        document.body.removeChild(textarea);
-                    }
-                    this.copied = true;
-                    setTimeout(() => this.copied = false, 2000);
-                }
-            }" class="flex items-center gap-2">
-                <pre class="flex-1 overflow-x-auto rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 font-mono text-xs text-gray-800"><code>{{ request.host_url.rstrip('/') }}/download/&lt;tld&gt;?kind=domains</code></pre>
-                <button
-                    type="button"
-                    @click="copyText($el.parentElement.querySelector('code').textContent.trim())"
-                    class="rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-sky-500"
-                >
-                    <span x-text="copied ? 'Copied!' : 'Copy'"></span>
-                </button>
-            </div>
-
-            <!-- Block 5: Per TLD new -->
-            <div x-data="{
-                copied: false,
-                copyText(text) {
-                    if (navigator.clipboard && window.isSecureContext) {
-                        navigator.clipboard.writeText(text);
-                    } else {
-                        const textarea = document.createElement('textarea');
-                        textarea.value = text;
-                        textarea.style.position = 'fixed';
-                        textarea.style.opacity = '0';
-                        document.body.appendChild(textarea);
-                        textarea.focus();
-                        textarea.select();
-                        try { document.execCommand('copy'); } catch (err) {}
-                        document.body.removeChild(textarea);
-                    }
-                    this.copied = true;
-                    setTimeout(() => this.copied = false, 2000);
-                }
-            }" class="flex items-center gap-2">
-                <pre class="flex-1 overflow-x-auto rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 font-mono text-xs text-gray-800"><code>{{ request.host_url.rstrip('/') }}/download/&lt;tld&gt;?kind=new</code></pre>
-                <button
-                    type="button"
-                    @click="copyText($el.parentElement.querySelector('code').textContent.trim())"
-                    class="rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-sky-500"
-                >
-                    <span x-text="copied ? 'Copied!' : 'Copy'"></span>
-                </button>
-            </div>
-
-            <!-- Block 6: Per TLD deleted -->
-            <div x-data="{
-                copied: false,
-                copyText(text) {
-                    if (navigator.clipboard && window.isSecureContext) {
-                        navigator.clipboard.writeText(text);
-                    } else {
-                        const textarea = document.createElement('textarea');
-                        textarea.value = text;
-                        textarea.style.position = 'fixed';
-                        textarea.style.opacity = '0';
-                        document.body.appendChild(textarea);
-                        textarea.focus();
-                        textarea.select();
-                        try { document.execCommand('copy'); } catch (err) {}
-                        document.body.removeChild(textarea);
-                    }
-                    this.copied = true;
-                    setTimeout(() => this.copied = false, 2000);
-                }
-            }" class="flex items-center gap-2">
-                <pre class="flex-1 overflow-x-auto rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 font-mono text-xs text-gray-800"><code>{{ request.host_url.rstrip('/') }}/download/&lt;tld&gt;?kind=deleted</code></pre>
-                <button
-                    type="button"
-                    @click="copyText($el.parentElement.querySelector('code').textContent.trim())"
-                    class="rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-sky-500"
-                >
-                    <span x-text="copied ? 'Copied!' : 'Copy'"></span>
-                </button>
-            </div>
-        </div>
-
-    </div>
-
-</div>
 
 {% endblock %}
 
