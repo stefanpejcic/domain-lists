@@ -334,30 +334,6 @@ def browse_deleted_pattern(pattern_type):
     })
 
 
-@app.route("/deleted/<pattern_type>/download")
-def download_deleted_pattern(pattern_type):
-    """Download compressed list for a specific pattern."""
-    pattern_type = pattern_type.lower().strip()
-    if pattern_type not in VALID_PATTERNS:
-        abort(404)
-
-    date = latest_date_with_pattern(pattern_type)
-    if not date:
-        abort(404)
-
-    file_path = LISTS_FOLDER / date / pattern_type / "deleted.txt.gz"
-    if not file_path.exists():
-        abort(404)
-
-    download_name = f"deleted-{pattern_type}-{date}.txt.gz"
-    return send_file(
-        file_path,
-        as_attachment=True,
-        download_name=download_name,
-        mimetype="application/gzip",
-    )
-
-
 # ==============================================================
 # Browse pages: /tld/<tld>/all, /tld/<tld>/new, /tld/<tld>/deleted
 # ==============================================================
@@ -421,40 +397,13 @@ def browse_tld_domains(tld):
 
 
 # ==============================================================
-# Downloads
-# ==============================================================
-@app.route("/tld/<tld>/download/<kind>")
-def download_tld_list(tld, kind):
-    tld = tld.lower().strip()
-    if "/" in tld or "\\" in tld or "." in tld:
-        abort(404)
-    if kind not in ("domains", "new", "deleted"):
-        abort(404)
-
-    date = latest_date_with_domains(tld)
-    if date is None:
-        abort(404)
-
-    file_path = LISTS_FOLDER / date / kind / f"{tld}.txt.gz"
-    if not file_path.exists():
-        abort(404)
-
-    download_name = f"{tld}-{kind}-{date}.txt.gz"
-    return send_file(
-        file_path,
-        as_attachment=True,
-        download_name=download_name,
-        mimetype="application/gzip",
-    )
-
-
-# ==============================================================
 # Guarded browser downloads: captcha landing page + single-use links
 #
-# Browser users never get a direct file URL. They land on a page that
-# (eventually) makes them pass a captcha and a short countdown, which
-# then hands them a randomized, one-time-use download link. The plain
-# endpoints above stay in place for future API-key based access.
+# There is no direct/permanent download URL. Browser users land on a
+# page that (eventually) makes them pass a captcha and a short
+# countdown, which then hands them a randomized, one-time-use download
+# link that can never be reused. A future API will offer key-based
+# direct access; until then this is the only way to get a file.
 # ==============================================================
 def _resolve_download_spec(spec):
     """Resolve a token spec to (file_path, download_name, mimetype), or None."""

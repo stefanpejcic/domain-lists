@@ -391,7 +391,7 @@
                     setTimeout(() => this.copied = false, 2000);
                 }
             }" class="flex items-center gap-2">
-                <pre class="flex-1 overflow-x-auto rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 font-mono text-xs text-gray-800"><code>{{ request.host_url.rstrip('/') }}{{ url_for('download_tld_list', tld='all', kind='domains') }}</code></pre>
+                <pre class="flex-1 overflow-x-auto rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 font-mono text-xs text-gray-800"><code>{{ request.host_url.rstrip('/') }}{{ url_for('download_landing', tld='all', kind='domains') }}</code></pre>
                 <button
                     type="button"
                     @click="copyText($el.parentElement.querySelector('code').textContent.trim())"
@@ -422,7 +422,7 @@
                     setTimeout(() => this.copied = false, 2000);
                 }
             }" class="flex items-center gap-2">
-                <pre class="flex-1 overflow-x-auto rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 font-mono text-xs text-gray-800"><code>{{ request.host_url.rstrip('/') }}{{ url_for('download_tld_list', tld='all', kind='new') }}</code></pre>
+                <pre class="flex-1 overflow-x-auto rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 font-mono text-xs text-gray-800"><code>{{ request.host_url.rstrip('/') }}{{ url_for('download_landing', tld='all', kind='new') }}</code></pre>
                 <button
                     type="button"
                     @click="copyText($el.parentElement.querySelector('code').textContent.trim())"
@@ -453,7 +453,7 @@
                     setTimeout(() => this.copied = false, 2000);
                 }
             }" class="flex items-center gap-2">
-                <pre class="flex-1 overflow-x-auto rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 font-mono text-xs text-gray-800"><code>{{ request.host_url.rstrip('/') }}{{ url_for('download_tld_list', tld='all', kind='deleted') }}</code></pre>
+                <pre class="flex-1 overflow-x-auto rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 font-mono text-xs text-gray-800"><code>{{ request.host_url.rstrip('/') }}{{ url_for('download_landing', tld='all', kind='deleted') }}</code></pre>
                 <button
                     type="button"
                     @click="copyText($el.parentElement.querySelector('code').textContent.trim())"
@@ -489,7 +489,7 @@
                     setTimeout(() => this.copied = false, 2000);
                 }
             }" class="flex items-center gap-2">
-                <pre class="flex-1 overflow-x-auto rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 font-mono text-xs text-gray-800"><code>{{ request.host_url.rstrip('/') }}/tld/&lt;tld&gt;/download/domains</code></pre>
+                <pre class="flex-1 overflow-x-auto rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 font-mono text-xs text-gray-800"><code>{{ request.host_url.rstrip('/') }}/download/&lt;tld&gt;?kind=domains</code></pre>
                 <button
                     type="button"
                     @click="copyText($el.parentElement.querySelector('code').textContent.trim())"
@@ -520,7 +520,7 @@
                     setTimeout(() => this.copied = false, 2000);
                 }
             }" class="flex items-center gap-2">
-                <pre class="flex-1 overflow-x-auto rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 font-mono text-xs text-gray-800"><code>{{ request.host_url.rstrip('/') }}/tld/&lt;tld&gt;/download/new</code></pre>
+                <pre class="flex-1 overflow-x-auto rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 font-mono text-xs text-gray-800"><code>{{ request.host_url.rstrip('/') }}/download/&lt;tld&gt;?kind=new</code></pre>
                 <button
                     type="button"
                     @click="copyText($el.parentElement.querySelector('code').textContent.trim())"
@@ -551,7 +551,7 @@
                     setTimeout(() => this.copied = false, 2000);
                 }
             }" class="flex items-center gap-2">
-                <pre class="flex-1 overflow-x-auto rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 font-mono text-xs text-gray-800"><code>{{ request.host_url.rstrip('/') }}/tld/&lt;tld&gt;/download/deleted</code></pre>
+                <pre class="flex-1 overflow-x-auto rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 font-mono text-xs text-gray-800"><code>{{ request.host_url.rstrip('/') }}/download/&lt;tld&gt;?kind=deleted</code></pre>
                 <button
                     type="button"
                     @click="copyText($el.parentElement.querySelector('code').textContent.trim())"
