@@ -84,9 +84,6 @@ def load_tlds():
         if info:
             data = {**data, "info": info}
 
-        data["tld_unicode"] = unicode_domain(data.get("tld", ""))
-        tlds.append(data)
-
     return sorted(tlds, key=lambda x: x.get("tld", ""))
 
 
@@ -217,6 +214,10 @@ def index():
         }
 
     tlds = load_tlds()
+
+    for tld in tlds:
+        tld["tld_unicode"] = unicode_domain(tld.get("tld", ""))
+        
     return render_template(
         "index.html",
         sizes=sizes,
