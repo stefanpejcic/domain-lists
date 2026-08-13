@@ -20,3 +20,5 @@ CRON_JOB="5 3 * * * bash $REPO_DIR/daily.sh"
 (crontab -l 2>/dev/null | grep -F "$CRON_JOB") || (crontab -l 2>/dev/null; echo "$CRON_JOB") | crontab -
 
 echo "DONE"
+
+#pkill -f '/home/domain-lists/venv/bin/python /home/domain-lists/website/app.py' 2>/dev/null; /home/domain-lists/venv/bin/python /home/domain-lists/website/app.py &
