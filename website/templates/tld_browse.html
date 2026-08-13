@@ -145,7 +145,7 @@ x-data="{
             <div class="inline-flex mt-6 p-1 bg-gray-200 rounded-lg">
                 <!-- Total / All Domains -->
                 <a
-                    href="{{ url_for('download_tld_list', tld=data.tld, kind='domains') }}"
+                    href="{{ url_for('download_landing', tld=data.tld, kind='domains') }}"
                     @mouseenter="switchKind('domains')"
                     :class="{
                         'bg-white shadow text-gray-900': kind === 'domains' || kind === 'all',
@@ -162,7 +162,7 @@ x-data="{
 
                 <!-- New Domains -->
                 <a
-                    href="{{ url_for('download_tld_list', tld=data.tld, kind='new') }}"
+                    href="{{ url_for('download_landing', tld=data.tld, kind='new') }}"
                     @mouseenter="switchKind('new')"
                     :class="{
                         'bg-white shadow text-gray-900': kind === 'new',
@@ -179,7 +179,7 @@ x-data="{
 
                 <!-- Deleted Domains -->
                 <a
-                    href="{{ url_for('download_tld_list', tld=data.tld, kind='deleted') }}"
+                    href="{{ url_for('download_landing', tld=data.tld, kind='deleted') }}"
                     @mouseenter="switchKind('deleted')"
                     :class="{
                         'bg-white shadow text-gray-900': kind === 'deleted',

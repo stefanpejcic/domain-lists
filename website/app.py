@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 import json
 import gzip
+import time
+import uuid
+import threading
 from pathlib import Path
 from flask import Flask, render_template, abort, send_file, request, jsonify
 
@@ -14,6 +17,14 @@ REPO_ROOT = BASE_DIR.parent
 JSON_FOLDER = REPO_ROOT / "json"
 LISTS_FOLDER = REPO_ROOT / "lists"
 DOMAINS_PER_PAGE = 100
+DOWNLOAD_KINDS = ("domains", "new", "deleted")
+DOWNLOAD_TOKEN_TTL = 10 * 60  # seconds a prepared download link stays valid
+
+# In-memory store for single-use download tokens: token -> spec dict.
+# Each spec also carries an "expires" timestamp. Tokens are popped (and thus
+# invalidated) the moment they are redeemed, so a link can never be reused.
+_download_tokens = {}
+_download_tokens_lock = threading.Lock()
 
 KIND_LABELS = {
     "domains": "All",
@@ -434,6 +445,166 @@ def download_tld_list(tld, kind):
         as_attachment=True,
         download_name=download_name,
         mimetype="application/gzip",
+    )
+
+
+# ==============================================================
+# Guarded browser downloads: captcha landing page + single-use links
+#
+# Browser users never get a direct file URL. They land on a page that
+# (eventually) makes them pass a captcha and a short countdown, which
+# then hands them a randomized, one-time-use download link. The plain
+# endpoints above stay in place for future API-key based access.
+# ==============================================================
+def _resolve_download_spec(spec):
+    """Resolve a token spec to (file_path, download_name, mimetype), or None."""
+    if spec.get("type") == "tld":
+        tld = spec.get("tld", "")
+        kind = spec.get("kind")
+        if kind not in DOWNLOAD_KINDS:
+            return None
+
+        date = latest_date_with_domains(tld)
+        if date is None:
+            return None
+
+        file_path = LISTS_FOLDER / date / kind / f"{tld}.txt.gz"
+        if not file_path.exists():
+            return None
+
+        return file_path, f"{tld}-{kind}-{date}.txt.gz", "application/gzip"
+
+    if spec.get("type") == "pattern":
+        pattern_type = spec.get("pattern_type", "")
+        if pattern_type not in VALID_PATTERNS:
+            return None
+
+        date = latest_date_with_pattern(pattern_type)
+        if date is None:
+            return None
+
+        file_path = LISTS_FOLDER / date / pattern_type / "deleted.txt.gz"
+        if not file_path.exists():
+            return None
+
+        return file_path, f"deleted-{pattern_type}-{date}.txt.gz", "application/gzip"
+
+    return None
+
+
+def _cleanup_download_tokens():
+    now = time.time()
+    for token in [t for t, spec in _download_tokens.items() if spec["expires"] < now]:
+        _download_tokens.pop(token, None)
+
+
+@app.route("/download/deleted/<pattern_type>")
+def download_pattern_landing(pattern_type):
+    pattern_type = pattern_type.lower().strip()
+    if pattern_type not in VALID_PATTERNS:
+        abort(404)
+
+    date = latest_date_with_pattern(pattern_type)
+    if not date:
+        abort(404)
+
+    file_path = LISTS_FOLDER / date / pattern_type / "deleted.txt.gz"
+    if not file_path.exists():
+        abort(404)
+
+    return render_template(
+        "download.html",
+        heading=f"Download deleted domains — {VALID_PATTERNS[pattern_type]}",
+        file_size=file_path.stat().st_size,
+        payload={"type": "pattern", "pattern_type": pattern_type},
+    )
+
+
+@app.route("/download/<tld>")
+def download_landing(tld):
+    tld = tld.lower().strip()
+    if "/" in tld or "\\" in tld or "." in tld:
+        abort(404)
+
+    kind = request.args.get("kind", "domains")
+    if kind not in DOWNLOAD_KINDS:
+        abort(404)
+
+    if tld == "all":
+        display_tld = "all zones"
+    else:
+        if load_json(JSON_FOLDER / tld / "latest") is None:
+            abort(404)
+        display_tld = "." + punycode_to_unicode(tld)
+
+    sizes = get_download_sizes(tld)
+    file_size = sizes.get(kind)
+    if file_size is None:
+        abort(404)
+
+    kind_label = {
+        "domains": "all registered",
+        "new": "newly registered",
+        "deleted": "deleted",
+    }[kind]
+
+    return render_template(
+        "download.html",
+        heading=f"Download {kind_label} {display_tld} domains",
+        file_size=file_size,
+        payload={"type": "tld", "tld": tld, "kind": kind},
+    )
+
+
+@app.route("/download/prepare", methods=["POST"])
+def download_prepare():
+    payload = request.get_json(silent=True) or {}
+    dtype = payload.get("type")
+
+    if dtype == "tld":
+        tld = str(payload.get("tld", "")).lower().strip()
+        kind = payload.get("kind")
+        if "/" in tld or "\\" in tld or "." in tld or kind not in DOWNLOAD_KINDS:
+            abort(400)
+        spec = {"type": "tld", "tld": tld, "kind": kind}
+    elif dtype == "pattern":
+        pattern_type = str(payload.get("pattern_type", "")).lower().strip()
+        if pattern_type not in VALID_PATTERNS:
+            abort(400)
+        spec = {"type": "pattern", "pattern_type": pattern_type}
+    else:
+        abort(400)
+
+    if _resolve_download_spec(spec) is None:
+        return jsonify({"error": "File not available"}), 404
+
+    token = uuid.uuid4().hex
+    with _download_tokens_lock:
+        _cleanup_download_tokens()
+        spec["expires"] = time.time() + DOWNLOAD_TOKEN_TTL
+        _download_tokens[token] = spec
+
+    return jsonify({"token": token, "expires_in": DOWNLOAD_TOKEN_TTL})
+
+
+@app.route("/download/file/<token>")
+def download_file(token):
+    with _download_tokens_lock:
+        spec = _download_tokens.pop(token, None)
+
+    if spec is None or spec["expires"] < time.time():
+        abort(404)
+
+    resolved = _resolve_download_spec(spec)
+    if resolved is None:
+        abort(404)
+
+    file_path, download_name, mimetype = resolved
+    return send_file(
+        file_path,
+        as_attachment=True,
+        download_name=download_name,
+        mimetype=mimetype,
     )
 
 
