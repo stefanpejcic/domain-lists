@@ -14,14 +14,15 @@ from zoneinfo import ZoneInfo
 # ==============================================================
 
 SCRIPT_DIR = Path(__file__).resolve().parent
+REPO_ROOT = SCRIPT_DIR.parent
 
-LISTS_FOLDER = SCRIPT_DIR / "lists"
-JSON_FOLDER = SCRIPT_DIR / "json"
+LISTS_FOLDER = REPO_ROOT / "lists"
+JSON_FOLDER = REPO_ROOT / "json"
 
 TIMEZONE_NAME = "Europe/Belgrade"
 TIMEZONE = ZoneInfo(TIMEZONE_NAME)
 
-LOG_FILE = SCRIPT_DIR / "pattern_counters_log.txt"
+LOG_FILE = REPO_ROOT / "pattern_counters_log.txt"
 
 NOW = datetime.now(TIMEZONE)
 TODAY = NOW.strftime("%Y-%m-%d")

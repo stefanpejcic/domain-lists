@@ -44,10 +44,11 @@ print("Token acquired successfully.")
 # Setup folders
 # ------------------------------
 script_dir = os.path.dirname(os.path.abspath(__file__))
-output_folder = os.path.join(script_dir, "downloads")
+repo_root = os.path.dirname(script_dir)
+output_folder = os.path.join(repo_root, "downloads")
 os.makedirs(output_folder, exist_ok=True)
 
-log_file = os.path.join(script_dir, "icann_download_log.txt")
+log_file = os.path.join(repo_root, "icann_download_log.txt")
 
 def log(msg):
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")

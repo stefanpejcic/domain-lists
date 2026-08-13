@@ -1,19 +1,22 @@
 #!/bin/bash
 
+REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+VENV="$REPO_DIR/venv/bin"
+
 # 1. download zone files
-/home/venv/bin/python3 /home/download_zones.py
+"$VENV/python3" "$REPO_DIR/scripts/download_zones.py"
 
 # 2. compare with previous date and geenerate lists
-/home/venv/bin/python /home/process_zones.py
+"$VENV/python" "$REPO_DIR/scripts/process_zones.py"
 
 # 3. download tld info
-#NO LONGER USED# /home/venv/bin/python /home/tld_scrapper.py
+#NO LONGER USED# "$VENV/python" "$REPO_DIR/scripts/tld_scrapper.py"
 
 # todo: generate counters and distribution
 
 
 # 4. cleanup (~9.6G)
-rm -rf /home/downloads/
+rm -rf "$REPO_DIR/downloads/"
 
 # 5. restart app
-pkill -f '/home/venv/bin/python app.py' 2>/dev/null; /home/venv/bin/python app.py &
+pkill -f "$VENV/python $REPO_DIR/website/app.py" 2>/dev/null; "$VENV/python" "$REPO_DIR/website/app.py" &

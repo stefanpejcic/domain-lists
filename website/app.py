@@ -10,8 +10,9 @@ app = Flask(__name__)
 # Configuration
 # ==============================================================
 BASE_DIR = Path(__file__).resolve().parent
-JSON_FOLDER = BASE_DIR / "json"
-LISTS_FOLDER = BASE_DIR / "lists"
+REPO_ROOT = BASE_DIR.parent
+JSON_FOLDER = REPO_ROOT / "json"
+LISTS_FOLDER = REPO_ROOT / "lists"
 DOMAINS_PER_PAGE = 100
 
 KIND_LABELS = {

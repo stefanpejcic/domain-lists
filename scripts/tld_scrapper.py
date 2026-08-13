@@ -5,11 +5,16 @@ import sys
 import json
 import argparse
 import concurrent.futures
+from pathlib import Path
 
 import requests
 
 HEADERS = {'User-Agent': 'Python TLD Scraper'}
 MAX_WORKERS = 2
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+REPO_ROOT = SCRIPT_DIR.parent
+JSON_FOLDER = REPO_ROOT / "json"
 
 
 def fetch_html(url):
@@ -149,7 +154,9 @@ def process_tld(tld):
         return tld, None
 
     data = parse_tld_html(html)
-    with open(f"json/{tld}/info.json", 'w') as f:
+    tld_folder = JSON_FOLDER / tld
+    tld_folder.mkdir(parents=True, exist_ok=True)
+    with open(tld_folder / "info.json", 'w') as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
     return tld, data
 
@@ -160,7 +167,7 @@ def main():
     parser.add_argument('--workers', type=int, default=MAX_WORKERS)
     args = parser.parse_args()
 
-    os.makedirs('json', exist_ok=True)
+    JSON_FOLDER.mkdir(parents=True, exist_ok=True)
 
     if args.tld:
         tlds = [args.tld.lower()]
@@ -182,7 +189,7 @@ def main():
 
     if not args.tld:
         all_tlds = [results[t] for t in tlds if t in results]
-        with open('info.json', 'w') as f:
+        with open(REPO_ROOT / "info.json", 'w') as f:
             json.dump({'tlds': all_tlds}, f, indent=2, ensure_ascii=False)
         print("Saved combined info.json")
     else:

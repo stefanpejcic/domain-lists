@@ -1,44 +1,8 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta
-        name="viewport"
-        content="width=device-width, initial-scale=1.0"
-    >
+{% extends "base.html" %}
 
-    <title>Domain Pattern Availability — Domain Zone Data</title>
+{% block title %}Domain Pattern Availability — Domain Zone Data{% endblock %}
 
-    <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
-
-    <!-- Alpine.js -->
-    <script
-        defer
-        src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"
-    ></script>
-
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        brand: {
-                            50: "#f0f9ff",
-                            100: "#e0f2fe",
-                            500: "#0ea5e9",
-                            600: "#0284c7",
-                            700: "#0369a1"
-                        }
-                    }
-                }
-            }
-        }
-    </script>
-</head>
-
-<body class="bg-gray-50 text-gray-900">
-
+{% block body_data %}
 <script id="patterns-data" type="application/json">
 {{ tlds | tojson }}
 </script>
@@ -46,42 +10,25 @@
 <script id="pattern-definitions" type="application/json">
 {{ patterns | tojson }}
 </script>
+{% endblock %}
 
-<div class="min-h-screen">
+{% block header_right %}
+{% if data.last_updated %}
+    Last update:
+    <span class="font-medium text-gray-900">
+        {{ data.last_updated }}
+    </span>,
+    next update in
+    <span
+        id="next-update"
+        class="font-medium text-gray-900"
+    >
+        calculating...
+    </span>
+{% endif %}
+{% endblock %}
 
-    <!-- Header -->
-    <header class="border-b bg-white">
-        <div class="mx-auto max-w-7xl px-6 py-5 flex items-center justify-between">
-
-            <a
-                href="{{ url_for('index') }}"
-                class="text-sm hover:text-gray-500 text-gray-900"
-            >
-                ↯ Domains lists
-            </a>
-
-            <div class="text-right text-sm text-gray-500">
-                {% if data.last_updated %}
-                    Last update:
-                    <span class="font-medium text-gray-900">
-                        {{ data.last_updated }}
-                    </span>,
-                    next update in
-                    <span
-                        id="next-update"
-                        class="font-medium text-gray-900"
-                    >
-                        calculating...
-                    </span>
-                {% endif %}
-            </div>
-
-        </div>
-    </header>
-
-
-    <!-- Main -->
-    <main class="mx-auto max-w-7xl px-6 py-8">
+{% block content %}
 
         <!-- Heading -->
         <div class="max-w-3xl mx-auto text-center mb-10">
@@ -495,36 +442,14 @@
 
         </div>
 
-    </main>
+{% endblock %}
 
+{% block footer_right %}
+Updated {{ data.last_updated }}
+· {{ data.timezone }}
+{% endblock %}
 
-    <!-- Footer -->
-
-    <footer class="border-t bg-white">
-
-        <div class="mx-auto max-w-7xl px-6 py-6">
-
-            <div class="flex flex-col gap-2 text-sm text-gray-500 sm:flex-row sm:justify-between">
-
-                <div>
-                    Domain Zone Data
-                </div>
-
-                <div>
-                    Updated {{ data.last_updated }}
-                    · {{ data.timezone }}
-                </div>
-
-            </div>
-
-        </div>
-
-    </footer>
-
-</div>
-
-
-<script>
+{% block countdown_script %}
     const lastUpdated = new Date("{{ data.last_updated }}");
     const nextUpdate =
         new Date(lastUpdated.getTime() + 24 * 60 * 60 * 1000);
@@ -551,7 +476,4 @@
     updateCountdown();
 
     setInterval(updateCountdown, 60000);
-</script>
-
-</body>
-</html>
+{% endblock %}

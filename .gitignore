@@ -1,0 +1,13 @@
+# Python virtual environment (created by install.sh)
+venv/
+__pycache__/
+*.pyc
+
+# Data generated/downloaded by the scripts (relative to repo root)
+downloads/
+lists/
+json/
+info.json
+
+# Logs written by the scripts
+*_log.txt

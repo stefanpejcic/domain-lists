@@ -15,15 +15,16 @@ from zoneinfo import ZoneInfo
 # ==============================================================
 
 SCRIPT_DIR = Path(__file__).resolve().parent
+REPO_ROOT = SCRIPT_DIR.parent
 
-DOWNLOAD_FOLDER = SCRIPT_DIR / "downloads"
-LISTS_FOLDER = SCRIPT_DIR / "lists"
-JSON_FOLDER = SCRIPT_DIR / "json"
+DOWNLOAD_FOLDER = REPO_ROOT / "downloads"
+LISTS_FOLDER = REPO_ROOT / "lists"
+JSON_FOLDER = REPO_ROOT / "json"
 
 TIMEZONE_NAME = "Europe/Belgrade"
 TIMEZONE = ZoneInfo(TIMEZONE_NAME)
 
-LOG_FILE = SCRIPT_DIR / "zone_processing_log.txt"
+LOG_FILE = REPO_ROOT / "zone_processing_log.txt"
 
 NOW = datetime.now(TIMEZONE)
 TODAY = NOW.strftime("%Y-%m-%d")
@@ -229,13 +230,13 @@ def find_previous_snapshot(tld, today):
 # Process one TLD (runs in a worker process)
 # ==============================================================
 
-def process_tld(tld, today, script_dir_str):
+def process_tld(tld, today, repo_root_str):
 
     # Re-derive paths inside the worker (ProcessPoolExecutor
     # pickles args, not module globals reliably across platforms).
-    script_dir = Path(script_dir_str)
-    download_folder = script_dir / "downloads"
-    lists_folder = script_dir / "lists"
+    repo_root = Path(repo_root_str)
+    download_folder = repo_root / "downloads"
+    lists_folder = repo_root / "lists"
 
     start_time = time.time()
 
@@ -691,13 +692,13 @@ def main():
 
     # Large files: one at a time, full machine available to `sort`/`comm`.
     for tld in large_tlds:
-        results.append(process_tld(tld, TODAY, str(SCRIPT_DIR)))
+        results.append(process_tld(tld, TODAY, str(REPO_ROOT)))
 
     # Small files: up to PARALLEL_SMALL concurrently.
     if small_tlds:
         with ProcessPoolExecutor(max_workers=PARALLEL_SMALL) as executor:
             futures = {
-                executor.submit(process_tld, tld, TODAY, str(SCRIPT_DIR)): tld
+                executor.submit(process_tld, tld, TODAY, str(REPO_ROOT)): tld
                 for tld in small_tlds
             }
             for future in as_completed(futures):

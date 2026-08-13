@@ -1,31 +1,20 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+{% extends "base.html" %}
 
-    <title>.{{ data.tld }} {{ 'newly registered' if kind == 'new' else ('deleted' if kind == 'deleted' else 'all') }} domains — Domain Zone Data</title>
+{% block title %}.{{ data.tld }} {{ 'newly registered' if kind == 'new' else ('deleted' if kind == 'deleted' else 'all') }} domains — Domain Zone Data{% endblock %}
 
-    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
-    <script src="https://cdn.tailwindcss.com"></script>
-</head>
+{% block header_left %}
+<a href="{{ url_for('index') }}" class="text-sm text-gray-500 hover:text-gray-900">
+    ← All TLDs
+</a>
+{% endblock %}
 
-<body class="bg-gray-50 text-gray-900">
+{% block header_right %}
+Last update: <span class="font-medium text-gray-900">{{ data.last_updated }}</span>, next update in <span id="next-update" class="font-medium text-gray-900">calculating...</span>
+{% endblock %}
 
-<div class="min-h-screen">
+{% block footer %}{% endblock %}
 
-    <header class="border-b bg-white">
-        <div class="mx-auto max-w-7xl px-6 py-5 flex items-center justify-between">
-            <a href="{{ url_for('index') }}" class="text-sm text-gray-500 hover:text-gray-900">
-                ← All TLDs
-            </a>
-
-            <div class="text-right text-sm text-gray-500">
-                Last update: <span class="font-medium text-gray-900">{{ data.last_updated }}</span>, next update in <span id="next-update" class="font-medium text-gray-900">calculating...</span>
-            </div>
-        </div>
-    </header>
-
+{% block main %}
     <main
         class="md:pt-10 px-4 mx-auto max-w-7xl md:px-6 lg:px-8 pb-8"
         x-data="{
@@ -82,6 +71,11 @@
             }
         }"
     >
+        {{ self.content() }}
+    </main>
+{% endblock %}
+
+{% block content %}
 
         <div class="max-w-2xl mx-auto text-center mb-10">
             <!-- Dynamic Heading -->
@@ -115,7 +109,7 @@
             <!-- Download Tabs (Hover updates domains list, Click triggers direct download) -->
             <div class="inline-flex mt-6 p-1 bg-gray-200 rounded-lg">
                 <!-- Total / All Domains -->
-                <a 
+                <a
                     href="{{ url_for('download_tld_list', tld=data.tld, kind='domains') }}"
                     @mouseenter="switchKind('domains')"
                     :class="{
@@ -132,7 +126,7 @@
                 </a>
 
                 <!-- New Domains -->
-                <a 
+                <a
                     href="{{ url_for('download_tld_list', tld=data.tld, kind='new') }}"
                     @mouseenter="switchKind('new')"
                     :class="{
@@ -149,7 +143,7 @@
                 </a>
 
                 <!-- Deleted Domains -->
-                <a 
+                <a
                     href="{{ url_for('download_tld_list', tld=data.tld, kind='deleted') }}"
                     @mouseenter="switchKind('deleted')"
                     :class="{
@@ -369,7 +363,7 @@
             <span class="font-medium text-gray-900">All zones combined</span>
 
             <!-- Block 1: All domains -->
-            <div x-data="{ 
+            <div x-data="{
                 copied: false,
                 copyText(text) {
                     if (navigator.clipboard && window.isSecureContext) {
@@ -400,7 +394,7 @@
             </div>
 
             <!-- Block 2: New domains -->
-            <div x-data="{ 
+            <div x-data="{
                 copied: false,
                 copyText(text) {
                     if (navigator.clipboard && window.isSecureContext) {
@@ -431,7 +425,7 @@
             </div>
 
             <!-- Block 3: Deleted domains -->
-            <div x-data="{ 
+            <div x-data="{
                 copied: false,
                 copyText(text) {
                     if (navigator.clipboard && window.isSecureContext) {
@@ -467,7 +461,7 @@
             <span class="font-medium text-gray-900">Individual zones</span>
 
             <!-- Block 4: Per TLD domains -->
-            <div x-data="{ 
+            <div x-data="{
                 copied: false,
                 copyText(text) {
                     if (navigator.clipboard && window.isSecureContext) {
@@ -498,7 +492,7 @@
             </div>
 
             <!-- Block 5: Per TLD new -->
-            <div x-data="{ 
+            <div x-data="{
                 copied: false,
                 copyText(text) {
                     if (navigator.clipboard && window.isSecureContext) {
@@ -529,7 +523,7 @@
             </div>
 
             <!-- Block 6: Per TLD deleted -->
-            <div x-data="{ 
+            <div x-data="{
                 copied: false,
                 copyText(text) {
                     if (navigator.clipboard && window.isSecureContext) {
@@ -564,11 +558,9 @@
 
 </div>
 
-        
-    </main>
-</div>
+{% endblock %}
 
-<script>
+{% block countdown_script %}
     const lastUpdated = new Date("{{ data.last_updated }}");
     const nextUpdate = new Date(lastUpdated.getTime() + 24 * 60 * 60 * 1000);
 
@@ -582,13 +574,10 @@
         }
 
         const hours = Math.ceil(diff / (1000 * 60 * 60));
-        document.getElementById("next-update").textContent = 
+        document.getElementById("next-update").textContent =
             `${hours} ${hours === 1 ? 'hour' : 'hours'}`;
     }
 
     updateCountdown();
     setInterval(updateCountdown, 60000);
-</script>
-
-</body>
-</html>
+{% endblock %}
