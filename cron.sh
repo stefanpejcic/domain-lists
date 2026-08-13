@@ -23,10 +23,10 @@ fi
 "$VENV/python" "$REPO_DIR/scripts/generate_keyword_lists.py"
 
 # cross-reference today's new domains against threat intel feeds
-"$VENV/python" "$REPO_DIR/scripts/generate_threat_matches.py"
+"$VENV/python" "$REPO_DIR/scripts/generate_threat_matches.py" &
 
 # check today's trending keyword domains against the CT logs API (needs CT_LOGS in website/.env)
-"$VENV/python" "$REPO_DIR/scripts/generate_live_domains.py"
+"$VENV/python" "$REPO_DIR/scripts/generate_live_domains.py" &
 
 # cleanup (~9.6G)
 rm -rf "$REPO_DIR/downloads/"
@@ -38,7 +38,7 @@ rm -rf "$REPO_DIR/downloads/"
 "$VENV/python" "$REPO_DIR/scripts/generate_sitemap.py"
 
 # generate og images
-"$VENV/python" "$REPO_DIR/scripts/generate_og_images.py"
+"$VENV/python" "$REPO_DIR/scripts/generate_og_images.py" &
 
 # 5. restart app
 pkill -f "$VENV/python $REPO_DIR/website/app.py" 2>/dev/null; "$VENV/python" "$REPO_DIR/website/app.py" &
