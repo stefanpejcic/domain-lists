@@ -7,7 +7,7 @@ python3 -m venv /home/venv
 
 /home/venv/bin/pip install --upgrade pip
 /home/venv/bin/pip install flask
-
+/home/venv/bin/pip install requests
 /home/venv/bin/python -c "import flask; print(flask.__version__)"
 
 #test /home/venv/bin/python app.py
