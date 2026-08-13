@@ -19,12 +19,19 @@ LISTS_FOLDER = REPO_ROOT / "lists"
 DOMAINS_PER_PAGE = 100
 DOWNLOAD_KINDS = ("domains", "new", "deleted")
 DOWNLOAD_TOKEN_TTL = 10 * 60  # seconds a prepared download link stays valid
+TLDS_CACHE_TTL = 30 * 60  # seconds the homepage TLD list is cached for
 
 # In-memory store for single-use download tokens: token -> spec dict.
 # Each spec also carries an "expires" timestamp. Tokens are popped (and thus
 # invalidated) the moment they are redeemed, so a link can never be reused.
 _download_tokens = {}
 _download_tokens_lock = threading.Lock()
+
+# Cache for load_tlds(), which scans every TLD's json files on disk.
+# Read once, reused for TLDS_CACHE_TTL seconds instead of rescanning on
+# every homepage request.
+_tlds_cache = {"data": None, "expires": 0}
+_tlds_cache_lock = threading.Lock()
 
 KIND_LABELS = {
     "domains": "All",
@@ -91,6 +98,23 @@ def load_tlds():
         tlds.append(data)
 
     return sorted(tlds, key=lambda x: x.get("tld", ""))
+
+
+def get_cached_tlds():
+    """load_tlds(), cached for TLDS_CACHE_TTL seconds."""
+    now = time.time()
+
+    with _tlds_cache_lock:
+        if _tlds_cache["data"] is not None and _tlds_cache["expires"] > now:
+            return _tlds_cache["data"]
+
+    tlds = load_tlds()
+
+    with _tlds_cache_lock:
+        _tlds_cache["data"] = tlds
+        _tlds_cache["expires"] = time.time() + TLDS_CACHE_TTL
+
+    return tlds
 
 
 def latest_date_with_pattern(pattern_type=None):
@@ -232,7 +256,7 @@ def index():
             "timezone": None,
         }
 
-    tlds = load_tlds()
+    tlds = get_cached_tlds()
     return render_template(
         "index.html",
         sizes=sizes,

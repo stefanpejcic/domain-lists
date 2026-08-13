@@ -117,6 +117,8 @@
         search: '',
         sort: 'domains',
         direction: 'desc',
+        showAll: false,
+        initialCount: 10,
 
         init() {
             this.items = JSON.parse(
@@ -172,6 +174,20 @@
                 });
         },
 
+        isFiltering() {
+            return this.search.trim() !== '';
+        },
+
+        visible() {
+            const results = this.sorted();
+
+            if (this.showAll || this.isFiltering()) {
+                return results;
+            }
+
+            return results.slice(0, this.initialCount);
+        },
+
         arrow(column) {
             if (this.sort !== column) {
                 return '';
@@ -208,6 +224,9 @@
 
                             <p class="mt-1 text-sm text-gray-500">
                                 Daily updated domain lists for {{ "{:,}".format(summary.tlds) }} TLDs.
+                                <template x-if="!showAll && !isFiltering() && items.length > initialCount">
+                                    <span>Showing top <span x-text="initialCount"></span> by domain count.</span>
+                                </template>
                             </p>
                         </div>
 
@@ -287,7 +306,7 @@
 
 <tbody class="divide-y bg-white">
     <template
-        x-for="tld in sorted()"
+        x-for="tld in visible()"
         :key="tld.tld"
     >
 
@@ -347,6 +366,18 @@
                     </table>
 
                 </div>
+
+                <template x-if="!isFiltering() && items.length > initialCount">
+                    <div class="border-t px-5 py-3 text-center">
+                        <button
+                            @click="showAll = !showAll"
+                            class="text-sm font-medium text-sky-600 hover:text-sky-800"
+                        >
+                            <span x-show="!showAll">Show all <span x-text="items.length"></span> TLDs →</span>
+                            <span x-show="showAll">Show top <span x-text="initialCount"></span> only</span>
+                        </button>
+                    </div>
+                </template>
 
             </div>
 
