@@ -11,8 +11,12 @@ python3 -m venv "$REPO_DIR/venv"
 "$REPO_DIR/venv/bin/pip" install flask
 "$REPO_DIR/venv/bin/pip" install requests
 "$REPO_DIR/venv/bin/pip" install python-dotenv
+"$REPO_DIR/venv/bin/pip" install Pillow
 
 "$REPO_DIR/venv/bin/python" -c "import flask; print(flask.__version__)"
+
+# Build the production Tailwind CSS (downloads the standalone CLI on first run)
+bash "$REPO_DIR/scripts/build_css.sh"
 
 #test "$REPO_DIR/venv/bin/python" "$REPO_DIR/website/app.py"
 

@@ -3,11 +3,13 @@ import csv
 import io
 import json
 import gzip
+import re
 import time
 import uuid
 import threading
+from datetime import datetime
 from pathlib import Path
-from flask import Flask, render_template, abort, send_file, request, jsonify, Response
+from flask import Flask, render_template, abort, send_file, request, jsonify, Response, url_for
 
 app = Flask(__name__)
 
@@ -242,8 +244,32 @@ app.jinja_env.filters["to_unicode"] = punycode_to_unicode
 
 @app.context_processor
 def inject_current_year():
-    from datetime import datetime
     return {"current_year": datetime.now().year}
+
+
+# Mirrors scripts/generate_og_images.py's slugify_path() - both must
+# derive the same slug from a URL path so the images the script writes
+# to website/static/og/ line up with what the template looks for.
+OG_IMAGE_FOLDER = BASE_DIR / "static" / "og"
+
+
+def _slugify_path(path):
+    path = path.strip("/")
+    if not path:
+        return "home"
+    return re.sub(r"[^a-zA-Z0-9]+", "-", path).strip("-").lower()
+
+
+@app.context_processor
+def inject_og_image_url():
+    def og_image_url():
+        slug = _slugify_path(request.path)
+        if (OG_IMAGE_FOLDER / f"{slug}.png").exists():
+            return url_for("static", filename=f"og/{slug}.png")
+        if (OG_IMAGE_FOLDER / "home.png").exists():
+            return url_for("static", filename="og/home.png")
+        return None
+    return {"og_image_url": og_image_url}
 
 
 # ==============================================================
@@ -720,6 +746,31 @@ def api_tld_download(tld, kind):
         download_name=f"{tld}-{kind}-{date}.txt.gz",
         mimetype="application/gzip",
     )
+
+
+# ==============================================================
+# Sitemap / robots.txt
+#
+# sitemap.xml is generated periodically (independent of this app) by
+# scripts/generate_sitemap.py and written to the repo root; this just
+# serves whatever is currently on disk.
+# ==============================================================
+@app.route("/sitemap.xml")
+def sitemap():
+    sitemap_path = REPO_ROOT / "sitemap.xml"
+    if not sitemap_path.exists():
+        abort(404)
+    return send_file(sitemap_path, mimetype="application/xml")
+
+
+@app.route("/robots.txt")
+def robots():
+    lines = [
+        "User-agent: *",
+        "Allow: /",
+        f"Sitemap: {request.url_root.rstrip('/')}/sitemap.xml",
+    ]
+    return Response("\n".join(lines) + "\n", mimetype="text/plain")
 
 
 # ==============================================================
