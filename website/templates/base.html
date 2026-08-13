@@ -75,6 +75,18 @@
                     });
                 },
 
+                // Live-updates the heading/target while the section is already
+                // open and idle, so hovering a different download button
+                // previews what it would download without disturbing an
+                // in-progress verification/countdown or popping the section
+                // open on its own.
+                preview(payload, heading) {
+                    if (this.payload === null || this.step !== 'idle') return;
+
+                    this.payload = payload;
+                    this.heading = heading;
+                },
+
                 verify() {
                     if (this.step !== 'idle' || !this.payload) return;
                     this.step = 'verifying';

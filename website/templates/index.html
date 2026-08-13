@@ -57,7 +57,7 @@
     <a
         href="#download"
         @click.prevent="$store.download.open({type: 'tld', tld: 'all', kind: 'domains'}, 'Download all domains')"
-        @mouseenter="kind = 'domains'; $dispatch('sort-table', { column: 'domains' })"
+        @mouseenter="kind = 'domains'; $dispatch('sort-table', { column: 'domains' }); $store.download.preview({type: 'tld', tld: 'all', kind: 'domains'}, 'Download all domains')"
         :class="{
             'bg-white shadow text-gray-900': kind === 'domains',
             'text-gray-600 hover:text-gray-900': kind !== 'domains'
@@ -75,7 +75,7 @@
     <a
         href="#download"
         @click.prevent="$store.download.open({type: 'tld', tld: 'all', kind: 'new'}, 'Download domains registered today')"
-        @mouseenter="kind = 'new'; $dispatch('sort-table', { column: 'new' })"
+        @mouseenter="kind = 'new'; $dispatch('sort-table', { column: 'new' }); $store.download.preview({type: 'tld', tld: 'all', kind: 'new'}, 'Download domains registered today')"
         :class="{
             'bg-white shadow text-gray-900': kind === 'new',
             'text-gray-600 hover:text-gray-900': kind !== 'new'
@@ -93,7 +93,7 @@
     <a
         href="#download"
         @click.prevent="$store.download.open({type: 'tld', tld: 'all', kind: 'deleted'}, 'Download domains deleted today')"
-        @mouseenter="kind = 'deleted'; $dispatch('sort-table', { column: 'deleted' })"
+        @mouseenter="kind = 'deleted'; $dispatch('sort-table', { column: 'deleted' }); $store.download.preview({type: 'tld', tld: 'all', kind: 'deleted'}, 'Download domains deleted today')"
         :class="{
             'bg-white shadow text-gray-900': kind === 'deleted',
             'text-gray-600 hover:text-gray-900': kind !== 'deleted'
@@ -345,6 +345,7 @@
                     <a
                         href="#download"
                         @click.prevent="$store.download.open({type: 'tld', tld: tld.tld, kind: 'domains'}, 'Download all .' + toUnicode(tld.tld) + ' domains')"
+                        @mouseenter="$store.download.preview({type: 'tld', tld: tld.tld, kind: 'domains'}, 'Download all .' + toUnicode(tld.tld) + ' domains')"
                         :title="'Download list of all .' + toUnicode(tld.tld) + ' domains'"
                         class="rounded-lg bg-gray-100 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-200 items-center gap-2 flex"
                     >
@@ -355,6 +356,7 @@
                     <a
                         href="#download"
                         @click.prevent="$store.download.open({type: 'tld', tld: tld.tld, kind: 'new'}, 'Download new .' + toUnicode(tld.tld) + ' domains')"
+                        @mouseenter="$store.download.preview({type: 'tld', tld: tld.tld, kind: 'new'}, 'Download new .' + toUnicode(tld.tld) + ' domains')"
                         :title="'Download list of new .' + toUnicode(tld.tld) + ' domains'"
                         class="rounded-lg bg-emerald-50 px-2.5 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-100 items-center gap-2 flex"
                     >
@@ -365,6 +367,7 @@
                     <a
                         href="#download"
                         @click.prevent="$store.download.open({type: 'tld', tld: tld.tld, kind: 'deleted'}, 'Download deleted .' + toUnicode(tld.tld) + ' domains')"
+                        @mouseenter="$store.download.preview({type: 'tld', tld: tld.tld, kind: 'deleted'}, 'Download deleted .' + toUnicode(tld.tld) + ' domains')"
                         :title="'Download list of deleted .' + toUnicode(tld.tld) + ' domains'"
                         class="rounded-lg bg-red-50 px-2.5 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100 items-center gap-2 flex"
                     >

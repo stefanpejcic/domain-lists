@@ -147,7 +147,7 @@ x-data="{
                 <a
                     href="#download"
                     @click.prevent="$store.download.open({type: 'tld', tld: '{{ data.tld }}', kind: 'domains'}, 'Download all .{{ data.tld | to_unicode }} domains')"
-                    @mouseenter="switchKind('domains')"
+                    @mouseenter="switchKind('domains'); $store.download.preview({type: 'tld', tld: '{{ data.tld }}', kind: 'domains'}, 'Download all .{{ data.tld | to_unicode }} domains')"
                     :class="{
                         'bg-white shadow text-gray-900': kind === 'domains' || kind === 'all',
                         'text-gray-600 hover:text-gray-900': kind !== 'domains' && kind !== 'all'
@@ -165,7 +165,7 @@ x-data="{
                 <a
                     href="#download"
                     @click.prevent="$store.download.open({type: 'tld', tld: '{{ data.tld }}', kind: 'new'}, 'Download new .{{ data.tld | to_unicode }} domains')"
-                    @mouseenter="switchKind('new')"
+                    @mouseenter="switchKind('new'); $store.download.preview({type: 'tld', tld: '{{ data.tld }}', kind: 'new'}, 'Download new .{{ data.tld | to_unicode }} domains')"
                     :class="{
                         'bg-white shadow text-gray-900': kind === 'new',
                         'text-gray-600 hover:text-gray-900': kind !== 'new'
@@ -183,7 +183,7 @@ x-data="{
                 <a
                     href="#download"
                     @click.prevent="$store.download.open({type: 'tld', tld: '{{ data.tld }}', kind: 'deleted'}, 'Download deleted .{{ data.tld | to_unicode }} domains')"
-                    @mouseenter="switchKind('deleted')"
+                    @mouseenter="switchKind('deleted'); $store.download.preview({type: 'tld', tld: '{{ data.tld }}', kind: 'deleted'}, 'Download deleted .{{ data.tld | to_unicode }} domains')"
                     :class="{
                         'bg-white shadow text-gray-900': kind === 'deleted',
                         'text-gray-600 hover:text-gray-900': kind !== 'deleted'
