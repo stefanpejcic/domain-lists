@@ -2,10 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta
-        name="viewport"
-        content="width=device-width, initial-scale=1.0"
-    >
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
     <title>{% block title %}Domain Zone Data — Free Daily Domain Lists for Every TLD{% endblock %}</title>
 
@@ -55,14 +52,6 @@
 
     <style>[x-cloak] { display: none !important; }</style>
 
-    <!--
-        Shared "download" flow, used by the embedded download section on
-        every page (see templates/_download_section.html). A page calls
-        Alpine.store('download').open(payload, heading) from a download
-        link/button; the section reveals itself, jumps the URL to
-        #download, and walks the user through the (future) captcha +
-        countdown before handing them a single-use file link.
-    -->
     <script>
         document.addEventListener('alpine:init', () => {
             Alpine.store('download', {
@@ -92,11 +81,6 @@
                     });
                 },
 
-                // Live-updates the heading/target while the section is already
-                // open and idle, so hovering a different download button
-                // previews what it would download without disturbing an
-                // in-progress verification/countdown or popping the section
-                // open on its own.
                 preview(payload, heading) {
                     if (this.payload === null || this.step !== 'idle') return;
 
