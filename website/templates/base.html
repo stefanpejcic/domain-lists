@@ -48,18 +48,10 @@
     </script>
     {% block structured_data %}{% endblock %}
 
-    <!-- Tailwind CSS: compiled/purged ahead of time by scripts/build_css.sh
-         (cdn.tailwindcss.com is fine for prototyping but explicitly not
-         meant for production - it ships the whole JIT compiler to the
-         browser and recompiles on every page load). Brand colors live in
-         tailwind.config.js at the repo root. -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 
     <!-- Alpine.js -->
-    <script
-        defer
-        src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"
-    ></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 
     <style>[x-cloak] { display: none !important; }</style>
 
