@@ -8,10 +8,7 @@ apt install -y python3-full python3-venv python3-pip
 python3 -m venv "$REPO_DIR/venv"
 
 "$REPO_DIR/venv/bin/pip" install --upgrade pip
-"$REPO_DIR/venv/bin/pip" install flask
-"$REPO_DIR/venv/bin/pip" install requests
-"$REPO_DIR/venv/bin/pip" install python-dotenv
-"$REPO_DIR/venv/bin/pip" install Pillow
+"$REPO_DIR/venv/bin/pip" install -r requiremnts.txt
 
 "$REPO_DIR/venv/bin/python" -c "import flask; print(flask.__version__)"
 
