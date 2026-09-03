@@ -8,14 +8,12 @@ apt install -y python3-full python3-venv python3-pip
 python3 -m venv "$REPO_DIR/venv"
 
 "$REPO_DIR/venv/bin/pip" install --upgrade pip
-"$REPO_DIR/venv/bin/pip" install -r requiremnts.txt
+"$REPO_DIR/venv/bin/pip" install -r requirements.txt
 
 "$REPO_DIR/venv/bin/python" -c "import flask; print(flask.__version__)"
 
 # Build the production Tailwind CSS (downloads the standalone CLI on first run)
 bash "$REPO_DIR/scripts/build_css.sh"
-
-#test "$REPO_DIR/venv/bin/python" "$REPO_DIR/website/app.py"
 
 # Add twice daily cron
 CRON_JOB="5 3,15 * * * bash $REPO_DIR/cron.sh"
