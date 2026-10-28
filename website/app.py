@@ -332,6 +332,14 @@ app.jinja_env.globals["static_url"] = static_url
 
 
 @app.after_request
+def allow_cross_origin(response):
+    # lets AI agents and in-browser tools call the API and read llms.txt
+    if request.path.startswith("/api/") or request.path == "/llms.txt":
+        response.headers["Access-Control-Allow-Origin"] = "*"
+    return response
+
+
+@app.after_request
 def security_headers(response):
     headers = response.headers
     headers.setdefault("Strict-Transport-Security", "max-age=31536000")
@@ -1016,7 +1024,129 @@ def api_index():
             ),
         },
         "rate_limit": f"{API_RATE_LIMIT} requests / {API_RATE_WINDOW}s per IP",
+        "openapi": f"{site_url()}/api/v1/openapi.json",
+        "llms_txt": f"{site_url()}/llms.txt",
     })
+
+
+@app.route("/api/v1/openapi.json")
+def api_openapi():
+    tld_param = {"name": "tld", "in": "path", "required": True, "schema": {"type": "string"},
+                 "description": "TLD without the dot, e.g. com, xyz, or punycode like xn--p1ai"}
+    stats = {"type": "object", "properties": {
+        "tld": {"type": "string"}, "date": {"type": "string", "format": "date"},
+        "domains": {"type": "integer"}, "new": {"type": "integer"}, "deleted": {"type": "integer"},
+        "last_updated": {"type": "string", "format": "date-time"}, "timezone": {"type": "string"},
+    }}
+    return jsonify({
+        "openapi": "3.1.0",
+        "info": {
+            "title": "zonelists.com API",
+            "version": "1.0",
+            "description": (
+                "Daily lists of registered, newly registered and deleted domains for every gTLD, "
+                "built from ICANN CZDS zone files. No API key needed. "
+                f"Rate limit: {API_RATE_LIMIT} requests per {API_RATE_WINDOW}s per IP."
+            ),
+        },
+        "servers": [{"url": site_url()}],
+        "paths": {
+            "/api/v1/summary": {"get": {
+                "summary": "Totals across all TLDs",
+                "responses": {"200": {"description": "Totals", "content": {"application/json": {"schema": {
+                    "type": "object", "properties": {k: {"type": "integer"} for k in ("tlds", "domains", "new", "deleted")}}}}}},
+            }},
+            "/api/v1/tlds": {"get": {
+                "summary": "Latest stats for every TLD",
+                "parameters": [{"name": "format", "in": "query", "required": False,
+                                "schema": {"type": "string", "enum": ["json", "csv"]}}],
+                "responses": {"200": {"description": "One entry per TLD", "content": {
+                    "application/json": {"schema": {"type": "array", "items": stats}},
+                    "text/csv": {"schema": {"type": "string"}}}}},
+            }},
+            "/api/v1/tld/{tld}": {"get": {
+                "summary": "Latest stats for one TLD",
+                "parameters": [tld_param],
+                "responses": {"200": {"description": "Stats", "content": {"application/json": {"schema": stats}}},
+                              "404": {"description": "Unknown TLD"}},
+            }},
+            "/api/v1/tld/{tld}/{kind}": {"get": {
+                "summary": "Download a domain list",
+                "description": (
+                    "Gzipped text, one domain per line. kind=domains is every registered domain in the TLD, "
+                    "new is domains added since the previous daily snapshot, deleted is domains removed. "
+                    "Use tld=all for every TLD combined."
+                ),
+                "parameters": [tld_param, {"name": "kind", "in": "path", "required": True,
+                                           "schema": {"type": "string", "enum": list(DOWNLOAD_KINDS)}}],
+                "responses": {"200": {"description": "List file", "content": {"application/gzip": {
+                    "schema": {"type": "string", "format": "binary"}}}},
+                              "404": {"description": "No list for this TLD/kind yet"}},
+            }},
+        },
+    })
+
+
+@app.route("/llms.txt")
+def llms_txt():
+    """Plain-language site summary for AI agents and LLM crawlers (llmstxt.org)."""
+    base = site_url()
+    summary = load_summary() or {}
+    tlds = sorted(get_cached_tlds(), key=lambda t: t.get("domains", 0), reverse=True)
+
+    def n(value):
+        return f"{int(value or 0):,}"
+
+    lines = [
+        "# zonelists.com",
+        "",
+        f"> Free, daily-updated lists of every registered domain name in {n(summary.get('tlds'))} generic TLDs, "
+        "built from ICANN CZDS zone files: all registered domains, newly registered domains and deleted (dropped) "
+        "domains per TLD, plus threat-intel matches and short-domain availability. Downloads need no account or API key.",
+        "",
+        f"## Current numbers ({summary.get('date', 'n/a')})",
+        "",
+        f"- Registered domains tracked: {n(summary.get('domains'))} across {n(summary.get('tlds'))} TLDs",
+        f"- Newly registered in the latest daily snapshot: {n(summary.get('new'))}",
+        f"- Deleted in the latest daily snapshot: {n(summary.get('deleted'))}",
+        "- Updated once a day. Country-code TLDs (.uk, .de, .rs, ...) are not available from ICANN CZDS and are not included.",
+        "",
+        "## Download a list directly",
+        "",
+        "Gzipped text, one domain per line, no key needed. Replace com with any TLD, or use all for every TLD combined.",
+        "",
+        f"- Every registered .com domain: {base}/api/v1/tld/com/domains",
+        f"- Newly registered .com domains: {base}/api/v1/tld/com/new",
+        f"- Deleted .com domains: {base}/api/v1/tld/com/deleted",
+        f"- Every newly registered domain, all TLDs: {base}/api/v1/tld/all/new",
+        "",
+        "## API",
+        "",
+        f"- [OpenAPI spec]({base}/api/v1/openapi.json)",
+        f"- [Totals]({base}/api/v1/summary)",
+        f"- [Stats for every TLD (JSON)]({base}/api/v1/tlds), [CSV]({base}/api/v1/tlds?format=csv)",
+        f"- Stats for one TLD: {base}/api/v1/tld/com",
+        f"- Rate limit: {API_RATE_LIMIT} requests per {API_RATE_WINDOW}s per IP",
+        "",
+        "## Pages",
+        "",
+        f"- [All TLDs with domain counts]({base}/)",
+        f"- [Recently dropped domains, all TLDs]({base}/dropped)",
+        f"- [Newly registered domains flagged by threat-intel feeds]({base}/threats)",
+        f"- [Newly registered domains by trending keyword]({base}/trending)",
+        f"- [Deleted short domains by pattern]({base}/deleted)",
+        f"- [Unregistered short domains per TLD]({base}/patterns)",
+        f"- Per TLD: {base}/tld/<tld>/all, {base}/tld/<tld>/new, {base}/tld/<tld>/deleted",
+        "",
+        "## Largest TLDs",
+        "",
+    ]
+    for t in tlds[:25]:
+        tld = t.get("tld", "")
+        lines.append(f"- [.{tld}]({base}/tld/{tld}/all): {n(t.get('domains'))} domains, "
+                     f"+{n(t.get('new'))} new, -{n(t.get('deleted'))} deleted")
+    lines.append("")
+    return Response("\n".join(lines), mimetype="text/plain")
 
 
 @app.route("/api/v1/summary")
@@ -1101,6 +1231,7 @@ def robots():
         "User-agent: *",
         "Allow: /",
         f"Sitemap: {site_url()}/sitemap.xml",
+        f"# Site summary for AI agents: {site_url()}/llms.txt",
     ]
     return Response("\n".join(lines) + "\n", mimetype="text/plain")
 

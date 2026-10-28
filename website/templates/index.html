@@ -16,6 +16,24 @@
 {% endif %}
 {% endblock %}
 
+{% block structured_data %}
+<script type="application/ld+json">
+{
+    "@context": "https://schema.org",
+    "@type": "DataCatalog",
+    "name": "zonelists.com domain lists",
+    "description": {{ ("Free, daily-updated lists of all registered, newly registered and deleted domain names for " ~ "{:,}".format(summary.tlds) ~ " generic TLDs, built from ICANN CZDS zone files. " ~ "{:,}".format(summary.domains) ~ " registered domains as of " ~ (summary.date or "") ~ ".") | tojson }},
+    "url": {{ (site_url ~ "/") | tojson }},
+    "creator": {"@type": "Organization", "name": "zonelists.com", "url": {{ (site_url ~ "/") | tojson }}},
+    "dateModified": {{ summary.last_updated | tojson }},
+    "dataset": [
+        {% for t in tlds | sort(attribute='domains', reverse=True) %}{% if loop.index <= 50 %}{% if loop.index > 1 %},{% endif %}
+        {"@type": "Dataset", "name": {{ ("List of all registered ." ~ (t.tld | to_unicode) ~ " domains") | tojson }}, "url": {{ (site_url ~ "/tld/" ~ t.tld ~ "/all") | tojson }}}{% endif %}{% endfor %}
+    ]
+}
+</script>
+{% endblock %}
+
 {% block content %}
 
 <div
@@ -411,6 +429,18 @@
                 </template>
 
             </div>
+
+
+            <!-- Server-rendered A-Z directory, so crawlers and AI agents can reach every TLD page without JavaScript -->
+            <section class="mt-8 rounded-xl border bg-white p-6 shadow-sm">
+                <h2 class="text-lg font-semibold text-gray-900">All TLDs A&ndash;Z</h2>
+                <p class="mt-1 text-sm text-gray-500">Every zone we track, with the number of registered domains.</p>
+                <ul class="mt-4 flex flex-wrap text-sm" style="column-gap: 16px; row-gap: 4px">
+                    {% for t in tlds %}
+                    <li><a href="/tld/{{ t.tld }}/all" class="text-sky-600 hover:text-sky-800">.{{ t.tld | to_unicode }}</a> <span class="text-gray-400">{{ "{:,}".format(t.domains or 0) }}</span></li>
+                    {% endfor %}
+                </ul>
+            </section>
 
 {% endblock %}
 

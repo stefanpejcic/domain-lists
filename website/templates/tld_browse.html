@@ -1,6 +1,30 @@
 {% extends "base.html" %}
 
-{% block title %}{{ 'newly registered' if kind == 'new' else ('deleted' if kind == 'deleted' else 'all') }} .{{ data.tld | to_unicode }} domains | zonelists.com{% endblock %}
+{% set kind_word = 'newly registered' if kind == 'new' else ('deleted' if kind == 'deleted' else 'all registered') %}
+{% set kind_count = data.new if kind == 'new' else (data.deleted if kind == 'deleted' else data.domains) %}
+{% block title %}List of {{ kind_word }} .{{ data.tld | to_unicode }} domains ({{ "{:,}".format(kind_count) }}) | zonelists.com{% endblock %}
+
+{% block structured_data %}
+<script type="application/ld+json">
+{
+    "@context": "https://schema.org",
+    "@type": "Dataset",
+    "name": {{ ("List of " ~ kind_word ~ " ." ~ (data.tld | to_unicode) ~ " domains") | tojson }},
+    "description": {{ ("Daily-updated list of " ~ kind_word ~ " ." ~ (data.tld | to_unicode) ~ " domain names, built from the official ." ~ data.tld ~ " zone file published through ICANN CZDS. The " ~ data.date ~ " snapshot has " ~ "{:,}".format(data.domains) ~ " registered domains, " ~ "{:,}".format(data.new) ~ " newly registered and " ~ "{:,}".format(data.deleted) ~ " deleted since the previous day. Plain text, one domain per line, gzip compressed.") | tojson }},
+    "url": {{ (site_url ~ request.path) | tojson }},
+    "keywords": {{ ["." ~ data.tld ~ " domains", "list of ." ~ data.tld ~ " domains", "." ~ data.tld ~ " zone file", "newly registered domains", "deleted domains", "domain list"] | tojson }},
+    "isAccessibleForFree": true,
+    "creator": {"@type": "Organization", "name": "zonelists.com", "url": {{ (site_url ~ "/") | tojson }}},
+    "dateModified": {{ data.last_updated | tojson }},
+    "temporalCoverage": {{ data.date | tojson }},
+    "distribution": [{
+        "@type": "DataDownload",
+        "encodingFormat": "application/gzip",
+        "contentUrl": {{ (site_url ~ "/api/v1/tld/" ~ data.tld ~ "/" ~ kind) | tojson }}
+    }]
+}
+</script>
+{% endblock %}
 
 {% block header_left %}
 <span class="crumb">{{ 'New' if kind == 'new' else ('Deleted' if kind == 'deleted' else 'All') }} .{{ data.tld | to_unicode }} domains</span>
@@ -117,30 +141,27 @@ x-data="{
         <div class="max-w-3xl mx-auto text-center mb-10">
             <!-- Dynamic Heading -->
             <h1 class="mx-auto text-3xl font-bold text-gray-900 sm:text-4xl sm:leading-none sm:tracking-tight">
-                <span x-show="kind === 'domains' || kind === 'all'">List of all registered .{{ data.tld | to_unicode }} domains</span>
-                <template x-if="kind === 'new'">
-                    <span>List of newly registered .{{ data.tld | to_unicode }} domains</span>
-                </template>
-                <template x-if="kind === 'deleted'">
-                    <span>List of deleted .{{ data.tld | to_unicode }} domains</span>
-                </template>
+                {# the server renders the heading for the page's own list, so crawlers see the right one #}
+                <span x-show="kind === 'domains' || kind === 'all'"{% if kind in ('new', 'deleted') %} style="display: none"{% endif %}>List of all registered .{{ data.tld | to_unicode }} domains</span>
+                <span x-show="kind === 'new'"{% if kind != 'new' %} style="display: none"{% endif %}>List of newly registered .{{ data.tld | to_unicode }} domains</span>
+                <span x-show="kind === 'deleted'"{% if kind != 'deleted' %} style="display: none"{% endif %}>List of deleted .{{ data.tld | to_unicode }} domains</span>
             </h1>
 
             <!-- Dynamic Subtitle -->
             <p class="mt-2 text-xl text-gray-600">
-                <span x-show="kind === 'domains' || kind === 'all'">
+                <span x-show="kind === 'domains' || kind === 'all'"{% if kind in ('new', 'deleted') %} style="display: none"{% endif %}>
                     Full list of <span class="font-bold">{{ "{:,}".format(data.domains) }}</span> registered .{{ data.tld | to_unicode }} domains.
                 </span>
-                <template x-if="kind === 'new'">
-                    <span>
-                        <span class="font-bold text-emerald-600">+{{ "{:,}".format(data.new) }}</span> .{{ data.tld | to_unicode }} domains newly registered in the last 24h.
-                    </span>
-                </template>
-                <template x-if="kind === 'deleted'">
-                    <span>
-                        <span class="font-bold text-red-600">-{{ "{:,}".format(data.deleted) }}</span> .{{ data.tld | to_unicode }} domains deleted in the last 24h.
-                    </span>
-                </template>
+                <span x-show="kind === 'new'"{% if kind != 'new' %} style="display: none"{% endif %}>
+                    <span class="font-bold text-emerald-600">+{{ "{:,}".format(data.new) }}</span> .{{ data.tld | to_unicode }} domains newly registered in the last 24h.
+                </span>
+                <span x-show="kind === 'deleted'"{% if kind != 'deleted' %} style="display: none"{% endif %}>
+                    <span class="font-bold text-red-600">-{{ "{:,}".format(data.deleted) }}</span> .{{ data.tld | to_unicode }} domains deleted in the last 24h.
+                </span>
+            </p>
+
+            <p class="mt-3 text-sm text-gray-500">
+                Snapshot of {{ data.date }}, built from the official .{{ data.tld }} zone file (ICANN CZDS) and updated daily.
             </p>
 
             <!-- Download Tabs (Hover updates domains list, Click triggers direct download) -->
