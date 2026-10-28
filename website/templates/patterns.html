@@ -1,8 +1,12 @@
 {% extends "base.html" %}
 
-{% block title %}Domain Pattern Availability — Domain Zone Data{% endblock %}
+{% block header_left %}
+<span class="crumb">Domain patterns</span>
+{% endblock %}
 
-{% block description %}Check availability of one-letter, two-letter, three-letter, numeric, and one-word domains across every TLD — updated daily from live zone data.{% endblock %}
+{% block title %}Domain Pattern Availability | Domain Zone Data{% endblock %}
+
+{% block description %}Check availability of one-letter, two-letter, three-letter, numeric, and one-word domains across every TLD, updated daily from live zone data.{% endblock %}
 
 {% block body_data %}
 <script id="patterns-data" type="application/json">

@@ -1,18 +1,16 @@
 {% extends "base.html" %}
 
-{% block title %}Recently dropped domains — Domain Zone Data{% endblock %}
+{% block title %}Recently dropped domains | Domain Zone Data{% endblock %}
 
 {% block header_left %}
-<a href="{{ url_for('index') }}" class="text-sm text-gray-500 hover:text-gray-900">
-    ← All TLDs
-</a>
+<span class="crumb">Dropped domains</span>
 {% endblock %}
 
 {% block header_right %}
 Last update: <span class="font-medium text-gray-900">{{ summary.last_updated }}</span>, next update in <span id="next-update" class="font-medium text-gray-900">calculating...</span>
 {% endblock %}
 
-{% block description %}Download recently dropped domains — {{ "{:,}".format(summary.deleted) }} domains removed from zone files in the last 24h across {{ "{:,}".format(summary.tlds) }} TLDs. Useful for drop-catching and domain research.{% endblock %}
+{% block description %}Download recently dropped domains: {{ "{:,}".format(summary.deleted) }} domains removed from zone files in the last 24h across {{ "{:,}".format(summary.tlds) }} TLDs. Useful for drop-catching and domain research.{% endblock %}
 
 {% block main %}
     <main
@@ -104,7 +102,7 @@ Last update: <span class="font-medium text-gray-900">{{ summary.last_updated }}<
             </p>
 
             <p class="mt-3 text-sm text-gray-500">
-                A domain leaving the zone means its nameservers were removed — it's often available to
+                A domain leaving the zone means its nameservers were removed, so it's often available to
                 register again shortly after. Useful for drop-catching, brand monitoring, and research.
             </p>
 
