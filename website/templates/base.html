@@ -32,7 +32,7 @@
     <meta name="twitter:title" content="{{ self.og_title() }}">
     <meta name="twitter:description" content="{{ self.description() }}">
 
-    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%230284c7'/%3E%3Cpath fill='%23fff' d='M4.5 9.9a.5.5 0 0 1 .5.5v1a.5.5 0 0 0 .5.5h5a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 1 1 0v1a1.5 1.5 0 0 1-1.5 1.5h-5A1.5 1.5 0 0 1 4 11.4v-1a.5.5 0 0 1 .5-.5Z'/%3E%3Cpath fill='%23fff' d='M7.65 9.85a.5.5 0 0 0 .7 0l2-2a.5.5 0 0 0-.7-.7L8.5 8.29V3.5a.5.5 0 0 0-1 0v4.79L6.35 7.15a.5.5 0 1 0-.7.7l2 2Z'/%3E%3C/svg%3E">
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230284c7'/%3E%3Cpath d='M9.5 10.5h13l-13 11h13' fill='none' stroke='%23fff' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
 
     <script type="application/ld+json">
     {
@@ -50,7 +50,17 @@
     <!-- Alpine.js -->
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 
-    <style>[x-cloak] { display: none !important; }</style>
+    <style>
+        [x-cloak] { display: none !important; }
+        .logo { display: inline-flex; align-items: center; gap: 8px; color: #111827; text-decoration: none; }
+        .logo-mark { width: 26px; height: 26px; flex: none; }
+        /* the Z draws itself once when the page loads, same as the uptime.rs pulse */
+        .logo-z { stroke-dasharray: 100; animation: logo-draw 1s ease-in-out .15s both; }
+        @keyframes logo-draw { from { stroke-dashoffset: 100; } to { stroke-dashoffset: 0; } }
+        @media (prefers-reduced-motion: reduce) { .logo-z { animation: none; } }
+        .logo-word { font-weight: 750; font-size: 18px; letter-spacing: -0.03em; }
+        .logo-tld { font-weight: 500; color: #6b7280; }
+    </style>
 
     <script>
         document.addEventListener('alpine:init', () => {
@@ -209,9 +219,10 @@
     <header class="border-b bg-white">
         <div class="mx-auto max-w-7xl px-6 py-5 flex items-center justify-between">
 
-            {% block header_left %}
-            <a href="{{ url_for('index') }}" class="text-sm hover:text-gray-500 text-gray-900">↯ Domains lists</a>
-            {% endblock %}
+            <div class="flex items-center gap-4">
+                {% include "_logo.html" %}
+                {% block header_left %}{% endblock %}
+            </div>
 
             <div class="text-right text-sm text-gray-500">
                 {% block header_right %}{% endblock %}
