@@ -908,6 +908,11 @@ _api_rate_lock = threading.Lock()
 
 
 def _client_ip():
+    # behind Cloudflare, Caddy replaces X-Forwarded-For with the (rotating) Cloudflare edge IP,
+    # so the real visitor IP is only in CF-Connecting-IP
+    cf_ip = request.headers.get("CF-Connecting-IP", "").strip()
+    if cf_ip:
+        return cf_ip
     forwarded = request.headers.get("X-Forwarded-For", "")
     if forwarded:
         return forwarded.split(",")[0].strip()
@@ -1040,8 +1045,6 @@ def robots():
 # Run
 # ==============================================================
 if __name__ == "__main__":
-    app.run(
-        host="0.0.0.0",
-        port=80,
-        debug=False,
-    )
+    # waitress instead of Flask's development server, same `python app.py` start command
+    from waitress import serve
+    serve(app, host="0.0.0.0", port=80, threads=8)
