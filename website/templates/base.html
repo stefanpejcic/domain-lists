@@ -11,21 +11,21 @@
     <meta name="keywords" content="{% block keywords %}domain list, zone file, domain zone data, list of domains, new domains, deleted domains, dropped domains, expired domains, TLD list, domain research, security research, domain availability, bulk domain data{% endblock %}">
 
     <meta name="robots" content="{% block robots %}index, follow{% endblock %}">
-    <link rel="canonical" href="{% block canonical %}{{ request.url_root.rstrip('/') }}{{ request.path }}{% endblock %}">
+    <link rel="canonical" href="{% block canonical %}{{ site_url }}{{ request.path }}{% endblock %}">
 
     <!-- Open Graph / Twitter -->
     <meta property="og:site_name" content="Domain Zone Data">
     <meta property="og:type" content="website">
     <meta property="og:title" content="{% block og_title %}{{ self.title() }}{% endblock %}">
     <meta property="og:description" content="{{ self.description() }}">
-    <meta property="og:url" content="{{ request.url_root.rstrip('/') }}{{ request.path }}">
+    <meta property="og:url" content="{{ site_url }}{{ request.path }}">
     {% set og_image = og_image_url() %}
     {% if og_image %}
-    <meta property="og:image" content="{{ request.url_root.rstrip('/') }}{{ og_image }}">
+    <meta property="og:image" content="{{ site_url }}{{ og_image }}">
     <meta property="og:image:width" content="1200">
     <meta property="og:image:height" content="630">
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:image" content="{{ request.url_root.rstrip('/') }}{{ og_image }}">
+    <meta name="twitter:image" content="{{ site_url }}{{ og_image }}">
     {% else %}
     <meta name="twitter:card" content="summary">
     {% endif %}
@@ -39,7 +39,7 @@
         "@context": "https://schema.org",
         "@type": "WebSite",
         "name": "Domain Zone Data",
-        "url": "{{ request.url_root }}",
+        "url": "{{ site_url }}/",
         "description": "Free daily-updated lists of registered, newly registered, and deleted domains for every TLD."
     }
     </script>

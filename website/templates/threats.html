@@ -5,7 +5,7 @@
     — Domain Zone Data
 {% endblock %}
 
-{% block description %}{% if source %}Domains registered today that are already flagged malicious by {{ source_label }} — a live feed for security researchers tracking freshly registered phishing and malware infrastructure.{% else %}Newly registered domains cross-referenced against public threat intel feeds (OpenPhish, URLhaus) — updated daily.{% endif %}{% endblock %}
+{% block description %}{% if source %}Domains registered in the last 7 days that are already flagged malicious by {{ source_label }} — a live feed for security researchers tracking freshly registered phishing and malware infrastructure.{% else %}Newly registered domains cross-referenced against public threat intel feeds (OpenPhish, PhishTank, CERT Polska, Phishing Army, Phishing.Database, Google Safe Browsing) — updated daily.{% endif %}{% endblock %}
 
 {% block header_left %}
 <a href="{{ url_for('index') }}"
@@ -44,7 +44,7 @@
             </h1>
 
             <p class="mt-3 text-xl text-gray-600">
-                Domains registered today that are already flagged malicious
+                Domains registered in the last 7 days that are already flagged malicious
                 by public threat intel feeds.
             </p>
 
@@ -58,7 +58,7 @@
             {% endif %}
 
             <p class="mt-3 text-xs text-gray-400 max-w-xl mx-auto">
-                Sourced from third-party feeds (OpenPhish, URLhaus). These are leads to
+                Sourced from third-party feeds (OpenPhish, PhishTank, CERT Polska, Phishing Army, Phishing.Database, Google Safe Browsing). These are leads to
                 investigate, not verified verdicts — false positives are possible.
             </p>
 
@@ -95,7 +95,7 @@
                     </h2>
 
                     <p class="mt-1 text-sm text-gray-500">
-                        Select a source to browse today's matching domains.
+                        Select a source to browse matching domains.
                     </p>
                 </div>
 
@@ -117,7 +117,7 @@
 
                             <th class="px-6 py-3 text-right text-xs font-medium
                                        uppercase tracking-wider text-gray-500">
-                                Matches today
+                                Matches (7 days)
                             </th>
 
                             <th class="px-6 py-3 text-right text-xs font-medium
@@ -271,7 +271,7 @@
                 </h1>
 
                 <p class="mt-3 text-xl text-gray-600">
-                    Domains registered today already flagged by {{ source_label }}.
+                    Domains registered in the last 7 days already flagged by {{ source_label }}.
                 </p>
 
                 <div class="mt-4 flex justify-center gap-3 flex-wrap">
@@ -279,7 +279,7 @@
                     <span class="rounded-full bg-red-50 px-3 py-1
                                  text-sm font-medium text-red-700">
 
-                        {{ "{:,}".format(count) }} matches today
+                        {{ "{:,}".format(count) }} matches in the last 7 days
 
                     </span>
 
@@ -471,7 +471,7 @@
                 </h2>
 
                 <p class="mt-2 text-sm leading-6 text-gray-500">
-                    Download the complete list of domains registered today
+                    Download the complete list of domains registered in the last 7 days
                     flagged by <strong>{{ source_label }}</strong>.
                 </p>
 

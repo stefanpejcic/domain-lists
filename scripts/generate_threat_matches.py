@@ -1,28 +1,34 @@
 #!/usr/bin/env python3
 """
-Cross-reference today's newly registered domains (lists/<date>/new/all.txt.gz,
-produced by process_zones.py) against public threat-intel feeds to flag
-domains that are newly registered AND already known-malicious.
+Cross-reference domains registered in the last WINDOW_DAYS days
+(lists/<date>/new/all.txt.gz, produced by process_zones.py) against public
+threat-intel feeds to flag domains that are newly registered AND already
+known-malicious. Feeds usually flag a domain a few days after it's
+registered, so checking only today's new domains catches almost nothing.
 
-Feeds used:
-- OpenPhish community feed (free, public, no API key):
-  https://raw.githubusercontent.com/openphish/public_feed/main/feed.txt
-- URLhaus plain-text feed (free, public, no API key):
-  https://urlhaus.abuse.ch/downloads/text/
+Feeds used (all free, no API key):
+- OpenPhish community feed (URLs)
+- PhishTank online-valid dump (CSV of URLs; PHISHTANK_APP_KEY in
+  website/.env is optional and only raises their download limit)
+- CERT Polska malicious domains list
+- Phishing Army blocklist (aggregates several phishing feeds)
+- Phishing.Database active phishing domains
 - Google Safe Browsing v4 threatMatches:find (needs G_API_KEY in
-  website/.env - skipped entirely if unset)
+  website/.env - skipped entirely if unset). Checks only the latest day's
+  new domains to stay within the API quota.
 
-OpenPhish/URLhaus matching: each feed entry is a full URL. We extract its
-hostname and walk its dot-suffixes (evil.sub.example.co.uk ->
-example.co.uk -> co.uk...) against the set of today's new domains, taking
-the first (most specific) hit. This avoids needing a public-suffix-list -
-if "example.co.uk" is what actually got registered, that's exactly what's
-in our own domain set, so no TLD-structure guessing is required.
+URLhaus is no longer used: abuse.ch retired its public downloads (410 Gone)
+and now requires an Auth-Key.
+
+Feed matching: for each feed entry we take the hostname and walk its
+dot-suffixes (evil.sub.example.co.uk -> example.co.uk -> co.uk...) against
+the set of new domains, taking the first (most specific) hit. This avoids
+needing a public-suffix-list - if "example.co.uk" is what actually got
+registered, that's exactly what's in our own domain set.
 
 Safe Browsing matching: unlike the feeds above, we submit our own domains
 TO Google (up to 500 URLs per request - its documented batch limit) and
 it tells us which are flagged, so matches are exact, not suffix-derived.
-This lets it check ALL of today's new domains, not just a scoped subset.
 
 Standalone - run this from the terminal (or your own cron entry) after
 process_zones.py has produced today's new/all.txt.gz.
@@ -32,7 +38,9 @@ matched list is a lead to investigate, not a verified verdict.
 
 Usage: python3 scripts/generate_threat_matches.py
 """
+import csv
 import gzip
+import io
 import json
 import os
 import sys
@@ -53,13 +61,30 @@ load_dotenv(REPO_ROOT / "website" / ".env")
 TIMEZONE_NAME = "Europe/Belgrade"
 TIMEZONE = ZoneInfo(TIMEZONE_NAME)
 
+# How many days of newly registered domains to check against the feeds.
+WINDOW_DAYS = 7
+
+_phishtank_key = os.getenv("PHISHTANK_APP_KEY", "").strip()
+
+# source -> (url, format): "urls" = one URL per line, "domains" = one
+# domain per line (hosts-file style lines are fine too), "phishtank" = CSV
 FEEDS = {
-    "openphish": "https://raw.githubusercontent.com/openphish/public_feed/main/feed.txt",
-    "urlhaus": "https://urlhaus.abuse.ch/downloads/text/",
+    "openphish": ("https://raw.githubusercontent.com/openphish/public_feed/main/feed.txt", "urls"),
+    "phishtank": (
+        f"http://data.phishtank.com/data/{_phishtank_key}/online-valid.csv"
+        if _phishtank_key else "http://data.phishtank.com/data/online-valid.csv",
+        "phishtank",
+    ),
+    "certpl": ("https://hole.cert.pl/domains/v2/domains.txt", "domains"),
+    "phishingarmy": ("https://phishing.army/download/phishing_army_blocklist.txt", "domains"),
+    "phishingdatabase": (
+        "https://raw.githubusercontent.com/Phishing-Database/Phishing.Database/master/phishing-domains-ACTIVE.txt",
+        "domains",
+    ),
 }
 
 HEADERS = {"User-Agent": "domain-lists-threat-check/1.0"}
-REQUEST_TIMEOUT = 30
+REQUEST_TIMEOUT = 60
 
 SAFEBROWSING_ENDPOINT = "https://safebrowsing.googleapis.com/v4/threatMatches:find"
 SAFEBROWSING_BATCH_SIZE = 500  # Google's documented max URLs per request
@@ -75,16 +100,25 @@ def fetch_feed(url):
     return resp.text
 
 
-def extract_hostnames(feed_text):
+def extract_hostnames(feed_text, fmt):
+    if fmt == "phishtank":
+        lines = (row.get("url", "") for row in csv.DictReader(io.StringIO(feed_text)))
+    else:
+        lines = feed_text.splitlines()
+
     hosts = set()
-    for line in feed_text.splitlines():
+    for line in lines:
         line = line.strip()
-        if not line or line.startswith("#"):
+        if not line or line.startswith(("#", "!")):
             continue
-        try:
-            host = urlparse(line).hostname
-        except ValueError:
-            continue
+        if fmt == "domains" and "://" not in line:
+            # last field, so "0.0.0.0 example.com" hosts-file lines work too
+            host = line.split()[-1]
+        else:
+            try:
+                host = urlparse(line).hostname
+            except ValueError:
+                continue
         if host:
             hosts.add(host.lower().rstrip("."))
     return hosts
@@ -100,15 +134,24 @@ def latest_date_with_new_domains():
     return sorted(dates, reverse=True)[0] if dates else None
 
 
-def load_new_domains(date):
-    path = LISTS_FOLDER / date / "new" / "all.txt.gz"
+def load_new_domains(date, days=WINDOW_DAYS):
+    """New domains from the latest `days` dated lists up to and including date."""
+    dates = sorted(
+        (
+            d.name for d in LISTS_FOLDER.iterdir()
+            if d.is_dir() and d.name <= date and (d / "new" / "all.txt.gz").exists()
+        ),
+        reverse=True,
+    )[:days]
+
     domains = set()
-    with gzip.open(path, "rt", encoding="utf-8", errors="replace") as f:
-        for line in f:
-            domain = line.strip()
-            if domain:
-                domains.add(domain)
-    return domains
+    for d in dates:
+        with gzip.open(LISTS_FOLDER / d / "new" / "all.txt.gz", "rt", encoding="utf-8", errors="replace") as f:
+            for line in f:
+                domain = line.strip()
+                if domain:
+                    domains.add(domain)
+    return domains, dates
 
 
 def match_domain(hostname, domain_set):
@@ -182,15 +225,18 @@ def main():
         )
         return 1
 
-    new_domains = load_new_domains(date)
-    print(f"Loaded {len(new_domains):,} newly registered domains for {date}")
+    new_domains, window_dates = load_new_domains(date)
+    print(
+        f"Loaded {len(new_domains):,} newly registered domains from "
+        f"{len(window_dates)} day(s): {window_dates[-1]} .. {window_dates[0]}"
+    )
 
     out_folder = LISTS_FOLDER / date / "threats"
 
     matches_by_source = {}
     all_matches = set()
 
-    for source, url in FEEDS.items():
+    for source, (url, fmt) in FEEDS.items():
         try:
             feed_text = fetch_feed(url)
         except Exception as e:
@@ -198,7 +244,7 @@ def main():
             matches_by_source[source] = set()
             continue
 
-        hostnames = extract_hostnames(feed_text)
+        hostnames = extract_hostnames(feed_text, fmt)
         print(f"{source}: {len(hostnames):,} hostnames in feed")
 
         matched = set()
@@ -216,8 +262,11 @@ def main():
 
     api_key = os.getenv("G_API_KEY", "").strip()
     if api_key:
+        # only the latest day: it's an API call per 500 domains, and a long gap since the
+        # previous snapshot can make one day's "new" list millions of domains
+        latest_domains, _ = load_new_domains(date, days=1)
         try:
-            matched = check_safebrowsing(new_domains, api_key)
+            matched = check_safebrowsing(latest_domains, api_key)
         except Exception as e:
             print(f"safebrowsing: FAILED - {e}", file=sys.stderr)
             matched = set()
@@ -242,6 +291,8 @@ def main():
         "date": date,
         "sources": {source: len(matched) for source, matched in matches_by_source.items()},
         "total": len(all_matches),
+        "window_days": WINDOW_DAYS,
+        "window_start": window_dates[-1],
         "last_updated": updated_at,
         "timezone": TIMEZONE_NAME,
     }
