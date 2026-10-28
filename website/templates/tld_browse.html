@@ -21,6 +21,7 @@ x-data="{
     kind: '{{ kind }}',
     page: 1,
     hasMore: false,
+    truncated: false,
     loading: false,
     matchedCount: 0,
 
@@ -43,6 +44,7 @@ x-data="{
 
             this.domains = cached.domains;
             this.hasMore = cached.hasMore;
+            this.truncated = cached.truncated;
             this.loading = false;
 
             return;
@@ -61,12 +63,14 @@ x-data="{
             .then(data => {
                 this.domains = data.domains;
                 this.hasMore = data.has_more;
+                this.truncated = data.truncated || false;
                 this.loading = false;
 
                 // Cache this result
                 this.cache[key] = {
                     domains: data.domains,
-                    hasMore: data.has_more
+                    hasMore: data.has_more,
+                    truncated: this.truncated
                 };
             })
             .catch(() => {
@@ -230,6 +234,10 @@ x-data="{
                     </button>
                 </div>
             </div>
+
+            <p x-show="!loading && truncated" x-cloak class="mb-3 text-sm text-gray-500">
+                This list is too large to search completely, so the search stopped after a few seconds and the results may be incomplete. Try a more specific search.
+            </p>
 
             <template x-if="!loading && domains.length === 0">
                 <p class="text-sm text-gray-400">No domains found.</p>

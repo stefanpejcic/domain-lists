@@ -11,7 +11,7 @@ import threading
 from datetime import datetime
 from pathlib import Path
 from dotenv import load_dotenv
-from flask import Flask, render_template, abort, send_file, request, jsonify, Response, url_for
+from flask import Flask, render_template, abort, send_file, request, jsonify, Response, url_for, g
 
 app = Flask(__name__)
 
@@ -28,6 +28,8 @@ load_dotenv(BASE_DIR / ".env")
 # Primary domain for canonical/og URLs, so the site can be served on several domains
 SITE_URL = os.getenv("SITE_URL", "").strip().rstrip("/")
 DOMAINS_PER_PAGE = 100
+# a search or deep page on a huge list (.com is 168M domains) stops after this, so it can't tie up a server thread
+SEARCH_TIME_LIMIT = 3  # seconds
 DOWNLOAD_KINDS = ("domains", "new", "deleted")
 DOWNLOAD_TOKEN_TTL = 10 * 60  # seconds a prepared download link stays valid
 TLDS_CACHE_TTL = 30 * 60  # seconds the homepage TLD list is cached for
@@ -249,9 +251,13 @@ def browse_domains_from_path(path, search, page):
     results = []
     matched_count = 0
     has_more = False
+    deadline = time.monotonic() + SEARCH_TIME_LIMIT
 
     with gzip.open(path, "rt", encoding="utf-8", errors="replace") as f:
-        for line in f:
+        for n, line in enumerate(f):
+            if n % 50000 == 0 and n and time.monotonic() > deadline:
+                g.search_truncated = True
+                break
             domain = line.strip()
             if not domain:
                 continue
@@ -267,6 +273,16 @@ def browse_domains_from_path(path, search, page):
                 break
 
     return results, has_more, matched_count
+
+
+def browse_response(domains, has_more, page):
+    return jsonify({
+        "domains": domains,
+        "has_more": has_more,
+        "page": page,
+        "per_page": DOMAINS_PER_PAGE,
+        "truncated": g.get("search_truncated", False),
+    })
 
 
 def browse_domains(tld, date, kind, search, page):
@@ -303,6 +319,28 @@ def site_url():
     return SITE_URL or request.url_root.rstrip("/")
 
 
+def static_url(filename):
+    # ?v=<mtime> changes whenever the file does, so browsers can cache static files for a long time
+    try:
+        version = int((BASE_DIR / "static" / filename).stat().st_mtime)
+    except OSError:
+        return url_for("static", filename=filename)
+    return url_for("static", filename=filename, v=version)
+
+
+app.jinja_env.globals["static_url"] = static_url
+
+
+@app.after_request
+def cache_static_files(response):
+    if request.path.startswith("/static/") and response.status_code == 200:
+        if request.args.get("v"):
+            response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        else:
+            response.headers["Cache-Control"] = "public, max-age=86400"
+    return response
+
+
 @app.context_processor
 def inject_site_url():
     return {"site_url": site_url()}
@@ -326,9 +364,9 @@ def inject_og_image_url():
     def og_image_url():
         slug = _slugify_path(request.path)
         if (OG_IMAGE_FOLDER / f"{slug}.png").exists():
-            return url_for("static", filename=f"og/{slug}.png")
+            return static_url(f"og/{slug}.png")
         if (OG_IMAGE_FOLDER / "home.png").exists():
-            return url_for("static", filename="og/home.png")
+            return static_url("og/home.png")
         return None
     return {"og_image_url": og_image_url}
 
@@ -445,12 +483,7 @@ def browse_deleted_pattern(pattern_type):
     file_path = LISTS_FOLDER / date / pattern_type / "deleted.txt.gz"
     domains, has_more, matched_count = browse_domains_from_path(file_path, search, page)
 
-    return jsonify({
-        "domains": domains,
-        "has_more": has_more,
-        "page": page,
-        "per_page": DOMAINS_PER_PAGE,
-    })
+    return browse_response(domains, has_more, page)
 
 
 # ==============================================================
@@ -526,12 +559,7 @@ def browse_trending(keyword):
     file_path = LISTS_FOLDER / date / "keywords" / f"{keyword}.txt.gz"
     domains, has_more, matched_count = browse_domains_from_path(file_path, search, page)
 
-    return jsonify({
-        "domains": domains,
-        "has_more": has_more,
-        "page": page,
-        "per_page": DOMAINS_PER_PAGE,
-    })
+    return browse_response(domains, has_more, page)
 
 
 
@@ -607,12 +635,7 @@ def browse_threats(source):
     file_path = LISTS_FOLDER / date / "threats" / f"{source}.txt.gz"
     domains, has_more, matched_count = browse_domains_from_path(file_path, search, page)
 
-    return jsonify({
-        "domains": domains,
-        "has_more": has_more,
-        "page": page,
-        "per_page": DOMAINS_PER_PAGE,
-    })
+    return browse_response(domains, has_more, page)
 
 
 # ==============================================================
@@ -669,12 +692,7 @@ def browse_tld_domains(tld):
 
     domains, has_more, matched_count = browse_domains(tld, date, kind, search, page)
 
-    return jsonify({
-        "domains": domains,
-        "has_more": has_more,
-        "page": page,
-        "per_page": DOMAINS_PER_PAGE,
-    })
+    return browse_response(domains, has_more, page)
 
 
 # ==============================================================
@@ -860,12 +878,7 @@ def browse_dropped():
 
     domains, has_more, matched_count = browse_domains("all", date, "deleted", search, page)
 
-    return jsonify({
-        "domains": domains,
-        "has_more": has_more,
-        "page": page,
-        "per_page": DOMAINS_PER_PAGE,
-    })
+    return browse_response(domains, has_more, page)
 
 
 # ==============================================================

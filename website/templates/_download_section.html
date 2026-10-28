@@ -47,7 +47,8 @@
                     Your download has started.
                 </div>
                 <a
-                    :href="$store.download.downloadUrl"
+                    href="#"
+                    @click.prevent="$store.download.retry()"
                     class="inline-block text-sm text-sky-600 hover:text-sky-800"
                 >
                     Didn't start? Click here.

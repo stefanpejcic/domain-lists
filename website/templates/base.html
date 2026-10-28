@@ -57,7 +57,7 @@
     </script>
     {% block structured_data %}{% endblock %}
 
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ static_url('css/style.css') }}">
 
     <!-- Alpine.js -->
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
@@ -197,6 +197,29 @@
                                 window.location.href = this.downloadUrl;
                             }
                         }, 1000);
+                    })
+                    .catch(() => {
+                        this.step = 'error';
+                        this.error = 'This file is currently unavailable. Please try again later.';
+                    });
+                },
+
+                // links are single-use and the automatic download already used this one, so get a fresh one
+                retry() {
+                    if (!this.payload) return;
+
+                    fetch('/download/prepare', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(this.payload)
+                    })
+                    .then(r => {
+                        if (!r.ok) throw new Error('unavailable');
+                        return r.json();
+                    })
+                    .then(data => {
+                        this.downloadUrl = '/download/file/' + data.token;
+                        window.location.href = this.downloadUrl;
                     })
                     .catch(() => {
                         this.step = 'error';
