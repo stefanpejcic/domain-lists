@@ -332,6 +332,17 @@ app.jinja_env.globals["static_url"] = static_url
 
 
 @app.after_request
+def security_headers(response):
+    headers = response.headers
+    headers.setdefault("Strict-Transport-Security", "max-age=31536000")
+    headers.setdefault("X-Content-Type-Options", "nosniff")
+    headers.setdefault("X-Frame-Options", "SAMEORIGIN")
+    headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+    return response
+
+
+@app.after_request
 def cache_static_files(response):
     if request.path.startswith("/static/") and response.status_code == 200:
         if request.args.get("v"):

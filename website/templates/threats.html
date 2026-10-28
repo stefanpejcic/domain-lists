@@ -2,7 +2,7 @@
 
 {% block title %}
     Threat Matches{% if source %}: {{ source_label }}{% endif %}
-    | Domain Zone Data
+    | zonelists.com
 {% endblock %}
 
 {% block description %}{% if source %}Domains registered in the last 7 days that are already flagged malicious by {{ source_label }}, a live feed for security researchers tracking freshly registered phishing and malware infrastructure.{% else %}Newly registered domains cross-referenced against public threat intel feeds (OpenPhish, PhishTank, CERT Polska, Phishing Army, Phishing.Database, Google Safe Browsing), updated daily.{% endif %}{% endblock %}

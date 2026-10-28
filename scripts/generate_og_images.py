@@ -86,7 +86,7 @@ def title_and_subtitle(path):
     if not parts:
         summary = load_json(JSON_FOLDER / "summary.json") or {}
         return (
-            "Domain Zone Data",
+            "zonelists.com",
             f"{summary.get('domains', 0):,} domains across {summary.get('tlds', 0):,} TLDs",
         )
 
@@ -117,7 +117,7 @@ def title_and_subtitle(path):
         data = load_json(JSON_FOLDER / tld / "latest") or {}
         return f".{tld} Domains", f"{data.get('domains', 0):,} registered domains"
 
-    return "Domain Zone Data", path
+    return "zonelists.com", path
 
 
 def wrap_text(draw, text, font, max_width):

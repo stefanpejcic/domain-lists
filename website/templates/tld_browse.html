@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}{{ 'newly registered' if kind == 'new' else ('deleted' if kind == 'deleted' else 'all') }} .{{ data.tld | to_unicode }} domains | Domain Zone Data{% endblock %}
+{% block title %}{{ 'newly registered' if kind == 'new' else ('deleted' if kind == 'deleted' else 'all') }} .{{ data.tld | to_unicode }} domains | zonelists.com{% endblock %}
 
 {% block header_left %}
 <span class="crumb">{{ 'New' if kind == 'new' else ('Deleted' if kind == 'deleted' else 'All') }} .{{ data.tld | to_unicode }} domains</span>
