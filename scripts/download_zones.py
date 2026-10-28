@@ -1,144 +1,200 @@
+#!/usr/bin/env python3
+"""
+Download zone files from ICANN CZDS.
+
+Used two ways:
+  - as a module by process_zones.py, which downloads, processes and deletes
+    one zone at a time (so the full ~10GB of zone files never sits on disk);
+  - standalone, to just download zones into downloads/:
+
+      python3 scripts/download_zones.py            # every approved zone
+      python3 scripts/download_zones.py com net    # only these
+      python3 scripts/download_zones.py --from org # approved zones from 'org' on
+
+Only zones this CZDS account is approved for are requested (taken from the
+CZDS /downloads/links endpoint), so ccTLDs and unapproved gTLDs are no longer
+hammered with requests that always 404/403.
+"""
 import os
 import sys
 import time
-import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
-import json
+from pathlib import Path
+
+import requests
 from dotenv import load_dotenv
 
-load_dotenv()
+# ------------------------------
+# Configuration
+# ------------------------------
+SCRIPT_DIR = Path(__file__).resolve().parent
+REPO_ROOT = SCRIPT_DIR.parent
+DOWNLOAD_FOLDER = REPO_ROOT / "downloads"
+LOG_FILE = REPO_ROOT / "icann_download_log.txt"
 
-# ---------------------------------------
-# 1. Authenticate and get CZDS API token
-# ---------------------------------------
+load_dotenv(REPO_ROOT / ".env")
 
 AUTH_URL = "https://account-api.icann.org/api/authenticate"
+LINKS_URL = "https://czds-api.icann.org/czds/downloads/links"
+ZONE_URL = "https://czds-api.icann.org/czds/downloads/{tld}.zone"
 
-USERNAME = os.getenv("CZDS_USERNAME")
-PASSWORD = os.getenv("CZDS_PASSWORD")
+DOWNLOAD_RETRIES = 3
+RETRY_BACKOFF_SECONDS = 30
+# (connect, read) - read is per chunk, not the whole transfer
+TIMEOUT = (30, 300)
+PARALLEL_DOWNLOADS = 4
 
-if not USERNAME or not PASSWORD:
-    print("Error: CZDS_USERNAME and CZDS_PASSWORD must be set in .env")
-    sys.exit(1)
-
-auth_payload = {
-    "username": USERNAME,
-    "password": PASSWORD
-}
-
-auth_headers = {
-    "Content-Type": "application/json"
-}
-
-auth_response = requests.post(AUTH_URL, headers=auth_headers, data=json.dumps(auth_payload))
-
-if auth_response.status_code != 200:
-    raise Exception(f"Authentication failed: {auth_response.status_code} -> {auth_response.text}")
-
-auth_data = auth_response.json()
-API_TOKEN = auth_data.get("accessToken")
-
-if not API_TOKEN:
-    raise Exception("Authentication response does not contain an access token.")
-
-print("Token acquired successfully.")
-
-
-
-
-# ------------------------------
-# Setup folders
-# ------------------------------
-script_dir = os.path.dirname(os.path.abspath(__file__))
-repo_root = os.path.dirname(script_dir)
-output_folder = os.path.join(repo_root, "downloads")
-os.makedirs(output_folder, exist_ok=True)
-
-log_file = os.path.join(repo_root, "icann_download_log.txt")
 
 def log(msg):
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     line = f"[{timestamp}] {msg}"
-    print(line)
-    with open(log_file, "a", encoding="utf-8") as f:
+    print(line, flush=True)
+    with open(LOG_FILE, "a", encoding="utf-8") as f:
         f.write(line + "\n")
 
-# ------------------------------
-# Download TLD list from IANA
-# ------------------------------
-start_time = time.time()
-start_tld = sys.argv[1].lower() if len(sys.argv) > 1 else None
-
-iana_tld_url = "https://data.iana.org/TLD/tlds-alpha-by-domain.txt"
-
-log(f"----------------------------------------------")
-log("Downloading TLD list from IANA...")
-response = requests.get(iana_tld_url)
-if response.status_code != 200:
-    raise Exception(f"Failed to download TLD list: {response.status_code}")
-
-tlds = [line.strip().lower() for line in response.text.splitlines() 
-        if line.strip() and not line.startswith("#")]
-log(f"Total TLDs in {iana_tld_url} list: {len(tlds)}")
-
-if start_tld:
-    if start_tld in tlds:
-        start_index = tlds.index(start_tld)
-        tlds = tlds[start_index:]
-        log(f"Starting from TLD '{start_tld}' (index {start_index}).")
-    else:
-        log(f"Start TLD '{start_tld}' not found. Starting from beginning.")
-
-log(f"Processing {len(tlds)} TLDs in batches of 5 at a time")
-headers = {"Authorization": f"Bearer {API_TOKEN}"}
 
 # ------------------------------
-# Download function
+# CZDS API
 # ------------------------------
-def download_tld(tld):
-    url = f"https://czds-api.icann.org/czds/downloads/{tld}.zone"
-    output_file = os.path.join(output_folder, f"{tld}.txt.gz")
-    try:
-        r = requests.get(url, headers=headers, stream=True, timeout=120)
-        if r.status_code == 200:
-            with open(output_file, "wb") as f:
-                for chunk in r.iter_content(chunk_size=8192):
-                    f.write(chunk)
-            return tld, True, None
-        else:
-            return tld, False, r.status_code
-    except Exception as e:
-        return tld, False, str(e)
+def get_token():
+    """Authenticate against ICANN and return a CZDS access token (valid 24h)."""
+    username = os.getenv("CZDS_USERNAME")
+    password = os.getenv("CZDS_PASSWORD")
 
-# ------------------------------
-# Download all TLDs in parallel
-# ------------------------------
-success_count = 0
-fail_count = 0
+    if not username or not password:
+        raise RuntimeError("CZDS_USERNAME and CZDS_PASSWORD must be set in .env")
 
-with ThreadPoolExecutor(max_workers=5) as executor:
-    futures = {executor.submit(download_tld, tld): tld for tld in tlds}
-    for future in as_completed(futures):
-        tld = futures[future]
+    last_error = None
+    for attempt in range(1, DOWNLOAD_RETRIES + 1):
         try:
-            tld_name, success, reason = future.result()
-            if success:
-                log(f"Downloading {tld_name}... Success ({reason or 'Downloaded'})")
+            r = requests.post(
+                AUTH_URL,
+                json={"username": username, "password": password},
+                timeout=TIMEOUT,
+            )
+            if r.status_code == 200 and r.json().get("accessToken"):
+                return r.json()["accessToken"]
+            last_error = f"{r.status_code} -> {r.text[:300]}"
+            # Bad credentials won't fix themselves on retry.
+            if r.status_code in (401, 403):
+                break
+        except requests.RequestException as e:
+            last_error = str(e)
+        time.sleep(RETRY_BACKOFF_SECONDS * attempt)
+
+    raise RuntimeError(f"CZDS authentication failed: {last_error}")
+
+
+def approved_tlds(token):
+    """Return the sorted list of TLDs this account may download."""
+    r = requests.get(
+        LINKS_URL,
+        headers={"Authorization": f"Bearer {token}"},
+        timeout=TIMEOUT,
+    )
+    r.raise_for_status()
+
+    tlds = []
+    for url in r.json():
+        name = url.rstrip("/").rsplit("/", 1)[-1]
+        if name.endswith(".zone"):
+            tlds.append(name[: -len(".zone")].lower())
+
+    return sorted(set(tlds))
+
+
+def download_zone(tld, token, output_folder=DOWNLOAD_FOLDER):
+    """
+    Download one zone to <output_folder>/<tld>.txt.gz, retrying transient
+    errors. Writes to a .part file first, so a half-finished download is
+    never mistaken for a complete zone.
+
+    Returns (path, None) on success or (None, reason) on failure.
+    """
+    output_folder = Path(output_folder)
+    output_folder.mkdir(parents=True, exist_ok=True)
+    output_file = output_folder / f"{tld}.txt.gz"
+    part_file = output_folder / f"{tld}.txt.gz.part"
+
+    headers = {"Authorization": f"Bearer {token}"}
+    reason = None
+
+    for attempt in range(1, DOWNLOAD_RETRIES + 1):
+        try:
+            with requests.get(
+                ZONE_URL.format(tld=tld), headers=headers, stream=True, timeout=TIMEOUT
+            ) as r:
+                if r.status_code == 200:
+                    with open(part_file, "wb") as f:
+                        for chunk in r.iter_content(chunk_size=1024 * 1024):
+                            f.write(chunk)
+                    os.replace(part_file, output_file)
+                    return output_file, None
+
+                reason = f"HTTP {r.status_code}"
+                # Not approved / no such zone: retrying won't help.
+                if r.status_code in (401, 403, 404):
+                    break
+        except (requests.RequestException, OSError) as e:
+            reason = str(e)
+
+        part_file.unlink(missing_ok=True)
+        if attempt < DOWNLOAD_RETRIES:
+            time.sleep(RETRY_BACKOFF_SECONDS * attempt)
+
+    part_file.unlink(missing_ok=True)
+    return None, reason
+
+
+# ------------------------------
+# Standalone usage
+# ------------------------------
+def main():
+    start_time = time.time()
+    args = [a.lower() for a in sys.argv[1:]]
+
+    log("----------------------------------------------")
+
+    try:
+        token = get_token()
+        tlds = approved_tlds(token)
+    except Exception as e:
+        log(f"ERROR: {e}")
+        return 1
+
+    log(f"Approved zones in CZDS: {len(tlds)}")
+
+    if len(args) == 2 and args[0] == "--from":
+        tlds = [t for t in tlds if t >= args[1]]
+    elif args:
+        tlds = [t for t in tlds if t in args]
+
+    log(f"Downloading {len(tlds)} zones, {PARALLEL_DOWNLOADS} at a time")
+
+    success_count = 0
+    fail_count = 0
+
+    with ThreadPoolExecutor(max_workers=PARALLEL_DOWNLOADS) as executor:
+        futures = {executor.submit(download_zone, tld, token): tld for tld in tlds}
+        for future in as_completed(futures):
+            tld = futures[future]
+            path, reason = future.result()
+            if path:
+                log(f"Downloading {tld}... Success")
                 success_count += 1
             else:
-                log(f"Downloading {tld_name}... Failed ({reason})")
+                log(f"Downloading {tld}... Failed ({reason})")
                 fail_count += 1
-        except Exception as e:
-            log(f"Downloading {tld}... Failed ({e})")
-            fail_count += 1
 
-# ------------------------------
-# Summary
-# ------------------------------
-elapsed = time.time() - start_time
-log("\nDownload Summary:")
-log(f"Successful downloads: {success_count}")
-log(f"Failed downloads: {fail_count}")
-log(f"Total elapsed time: {elapsed:.2f} seconds")
-log(f"----------------------------------------------")
+    log("Download Summary:")
+    log(f"Successful downloads: {success_count}")
+    log(f"Failed downloads: {fail_count}")
+    log(f"Total elapsed time: {time.time() - start_time:.2f} seconds")
+    log("----------------------------------------------")
+
+    return 0 if fail_count == 0 else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

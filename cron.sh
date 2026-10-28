@@ -1,41 +1,42 @@
 #!/bin/bash
+# Runs inside the "domains" container (ofelia job, every 6h, no-overlap).
+# The first run of a day does the work; later runs only retry zones that
+# failed and otherwise exit right away. Failure alerts are emailed by
+# process_zones.py itself.
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-VENV="$REPO_DIR/venv/bin"
+PY="python3 -B"
+# venv from install.sh (non-container installs)
+[ -x "$REPO_DIR/venv/bin/python" ] && PY="$REPO_DIR/venv/bin/python -B"
 
-notify() {
-    "$VENV/python3" "$REPO_DIR/scripts/notify.py" "$1" "$2"
-}
-
-# download zone files
-"$VENV/python3" "$REPO_DIR/scripts/download_zones.py"
-if [ $? -ne 0 ]; then
-    notify "domain-lists: download_zones.py failed" "$(tail -n 50 "$REPO_DIR/icann_download_log.txt" 2>/dev/null)"
-fi
-
-# compare with previous date and geenerate lists
-"$VENV/python" "$REPO_DIR/scripts/process_zones.py"
-if [ $? -ne 0 ]; then
-    notify "domain-lists: process_zones.py failed" "$(tail -n 50 "$REPO_DIR/zone_processing_log.txt" 2>/dev/null)"
+# download + process every zone not yet done today
+$PY "$REPO_DIR/scripts/process_zones.py"
+if [ $? -eq 2 ]; then
+    echo "Nothing new to process."
+    exit 0
 fi
 
 # generate trending keyword lists (needs today's new/all.txt.gz from process_zones.py)
-"$VENV/python" "$REPO_DIR/scripts/generate_keyword_lists.py"
+$PY "$REPO_DIR/scripts/generate_keyword_lists.py"
 
 # cross-reference today's new domains against threat intel feeds
-"$VENV/python" "$REPO_DIR/scripts/generate_threat_matches.py" &
+$PY "$REPO_DIR/scripts/generate_threat_matches.py"
 
-# cleanup (~9.6G)
-rm -rf "$REPO_DIR/downloads/"
+# short deleted domains (/deleted/<pattern>) and pattern counters (/patterns)
+$PY "$REPO_DIR/scripts/extract_short_domains.py"
+$PY "$REPO_DIR/scripts/generate_distribution.py"
 
-# 3. download tld info
-#NO LONGER USED# "$VENV/python" "$REPO_DIR/scripts/tld_scrapper.py"
+# 3. download TLD info
+# NO LONGER USED: $PY "$REPO_DIR/scripts/tld_scrapper.py"
 
 # generate sitemaps
-"$VENV/python" "$REPO_DIR/scripts/generate_sitemap.py"
+$PY "$REPO_DIR/scripts/generate_sitemap.py"
 
-# generate og images
-"$VENV/python" "$REPO_DIR/scripts/generate_og_images.py" &
+# generate OG images
+$PY "$REPO_DIR/scripts/generate_og_images.py"
 
-# 5. restart app
-pkill -f "$VENV/python $REPO_DIR/website/app.py" 2>/dev/null; "$VENV/python" "$REPO_DIR/website/app.py" &
+# cleanup (zones are deleted as they're processed; this catches leftovers)
+rm -rf "$REPO_DIR/downloads/" "$REPO_DIR/tmp/"
+
+# The website reads everything from disk on each request, so no restart
+# is needed.
