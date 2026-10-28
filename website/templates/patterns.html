@@ -9,12 +9,9 @@
 {% block description %}Check availability of one-letter, two-letter, three-letter, numeric, and one-word domains across every TLD, updated daily from live zone data.{% endblock %}
 
 {% block body_data %}
+{# [[tld, available per pattern in pattern_keys order], ...] #}
 <script id="patterns-data" type="application/json">
-{{ tlds | tojson }}
-</script>
-
-<script id="pattern-definitions" type="application/json">
-{{ patterns | tojson }}
+{{ rows | tojson }}
 </script>
 {% endblock %}
 
@@ -47,7 +44,7 @@
                 See how many short domain names are still available
                 across
                 <span class="font-bold text-2xl text-gray-900">
-                    {{ "{:,}".format(tlds|length) }}
+                    {{ "{:,}".format(rows|length) }}
                 </span>
                 zones.
             </p>
@@ -59,87 +56,51 @@
         </div>
 
 
-        <!-- Availability table -->
+        <!-- Availability table: rows are built as one HTML string, Alpine bindings per cell were too slow for 1000+ TLDs -->
         <div
             class="mt-8"
             x-data="{
-                items: [],
+                rows: [],
                 search: '',
-                sort: 'tld',
+                sort: 0,
                 direction: 'asc',
 
                 init() {
-                    this.items = Object.entries(
-                        JSON.parse(
-                            document.getElementById('patterns-data').textContent
-                        )
-                    ).map(([tld, data]) => ({
-                        tld: tld,
-                        ...data
-                    }));
-                },
-
-                matches(item) {
-                    return item.tld
-                        .toLowerCase()
-                        .includes(this.search.toLowerCase());
-                },
-
-                value(item, pattern) {
-                    return Number(
-                        item.patterns?.[pattern]?.available
-                    ) || 0;
+                    const fmt = new Intl.NumberFormat();
+                    this.rows = JSON.parse(document.getElementById('patterns-data').textContent).map(r => {
+                        const name = '.' + toUnicode(r[0]);
+                        return { tld: r[0], name: name, search: (r[0] + ' ' + name).toLowerCase(), values: r.slice(1), cells: r.slice(1).map(v => fmt.format(v)) };
+                    });
+                    this.$watch('search', () => this.render());
+                    this.render();
                 },
 
                 sortBy(column) {
                     if (this.sort === column) {
-                        this.direction =
-                            this.direction === 'asc'
-                                ? 'desc'
-                                : 'asc';
+                        this.direction = this.direction === 'asc' ? 'desc' : 'asc';
                     } else {
                         this.sort = column;
-                        this.direction =
-                            column === 'tld'
-                                ? 'asc'
-                                : 'desc';
+                        this.direction = column === 0 ? 'asc' : 'desc';
                     }
-                },
-
-                sorted() {
-                    return this.items
-                        .filter(item => this.matches(item))
-                        .sort((a, b) => {
-
-                            if (this.sort === 'tld') {
-                                const result =
-                                    a.tld.localeCompare(b.tld);
-
-                                return this.direction === 'asc'
-                                    ? result
-                                    : -result;
-                            }
-
-                            const aValue =
-                                this.value(a, this.sort);
-
-                            const bValue =
-                                this.value(b, this.sort);
-
-                            return this.direction === 'asc'
-                                ? aValue - bValue
-                                : bValue - aValue;
-                        });
+                    this.render();
                 },
 
                 arrow(column) {
-                    if (this.sort !== column) {
-                        return '';
-                    }
+                    if (this.sort !== column) return '';
+                    return this.direction === 'asc' ? '↑' : '↓';
+                },
 
-                    return this.direction === 'asc'
-                        ? '↑'
-                        : '↓';
+                render() {
+                    const q = this.search.trim().toLowerCase();
+                    const col = this.sort, dir = this.direction === 'asc' ? 1 : -1;
+                    const list = this.rows.filter(r => !q || r.search.includes(q));
+                    list.sort((a, b) => col === 0 ? dir * a.tld.localeCompare(b.tld) : dir * (a.values[col - 1] - b.values[col - 1]));
+                    const esc = t => t.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+                    this.$refs.body.innerHTML = list.length ? list.map(r =>
+                        '<tr class=&quot;hover:bg-gray-50&quot;><td class=&quot;px-5 py-4&quot;><a href=&quot;/tld/' + r.tld + '/all&quot; class=&quot;font-semibold text-sky-600 hover:text-sky-800&quot;>' + esc(r.name) + '</a></td>' +
+                        r.values.map((v, i) => '<td class=&quot;px-5 py-4 text-right&quot;><span class=&quot;font-medium ' + (v > 0 ? 'text-emerald-600' : 'text-gray-400') + '&quot;>' + r.cells[i] + '</span></td>').join('') +
+                        '</tr>'
+                    ).join('') : '<tr><td colspan=&quot;{{ pattern_keys|length + 1 }}&quot; class=&quot;px-5 py-8 text-center text-gray-500&quot;>No TLDs match your search.</td></tr>';
                 }
             }"
         >
@@ -207,97 +168,19 @@
                     <table class="w-full text-left text-sm border-collapse">
 
                         <thead class="sticky top-0 z-10 bg-gray-50 text-xs uppercase text-gray-500 shadow-sm">
-
                             <tr>
-
-                                <!-- TLD -->
-
-                                <th
-                                    class="cursor-pointer select-none px-5 py-3 hover:bg-gray-100"
-                                    @click="sortBy('tld')"
-                                >
-                                    <div class="flex items-center gap-1">
-                                        TLD
-                                        <span x-text="arrow('tld')"></span>
-                                    </div>
+                                <th class="cursor-pointer select-none px-5 py-3 hover:bg-gray-100" @click="sortBy(0)">
+                                    <div class="flex items-center gap-1">TLD <span x-text="arrow(0)"></span></div>
                                 </th>
-
-
-                                <!-- Patterns -->
-
-                                {% for key, pattern in patterns.items() %}
-
-                                <th
-                                    class="cursor-pointer select-none px-5 py-3 text-right hover:bg-gray-100"
-                                    @click="sortBy('{{ key }}')"
-                                >
-                                    <div class="flex items-center justify-end gap-1">
-
-                                        <span>
-                                            {{ key }}
-                                        </span>
-
-                                        <span x-text="arrow('{{ key }}')"></span>
-
-                                    </div>
+                                {% for key in pattern_keys %}
+                                <th class="cursor-pointer select-none px-5 py-3 text-right hover:bg-gray-100" @click="sortBy({{ loop.index }})">
+                                    <div class="flex items-center justify-end gap-1"><span>{{ key }}</span> <span x-text="arrow({{ loop.index }})"></span></div>
                                 </th>
-
                                 {% endfor %}
-
                             </tr>
-
                         </thead>
 
-
-                        <tbody class="divide-y bg-white">
-
-                            <template
-                                x-for="item in sorted()"
-                                :key="item.tld"
-                            >
-
-                                <tr class="hover:bg-gray-50">
-
-                                    <!-- TLD -->
-
-                                    <td class="px-5 py-4">
-
-                                        <a
-                                            :href="'/tld/' + item.tld + '/all'"
-                                            class="font-semibold text-sky-600 hover:text-sky-800"
-                                            x-text="'.' + toUnicode(item.tld)"
-                                        ></a>
-
-                                    </td>
-
-
-                                    <!-- Pattern values -->
-
-                                    {% for key, pattern in patterns.items() %}
-
-                                    <td class="px-5 py-4 text-right">
-
-                                        <span
-                                            class="font-medium"
-                                            :class="
-                                                value(item, '{{ key }}') > 0
-                                                    ? 'text-emerald-600'
-                                                    : 'text-gray-400'
-                                            "
-                                            x-text="
-                                                value(item, '{{ key }}').toLocaleString()
-                                            "
-                                        ></span>
-
-                                    </td>
-
-                                    {% endfor %}
-
-                                </tr>
-
-                            </template>
-
-                        </tbody>
+                        <tbody class="divide-y bg-white" x-ref="body"></tbody>
 
                     </table>
 
@@ -309,7 +192,7 @@
 
 
         <!-- Pattern explanation -->
-        <div class="mb-8 rounded-xl border bg-white p-6 shadow-sm">
+        <div class="mt-8 rounded-xl border bg-white p-6 shadow-sm">
 
             <h2 class="text-lg font-semibold text-gray-900">
                 Domain Patterns

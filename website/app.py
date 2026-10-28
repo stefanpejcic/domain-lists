@@ -880,18 +880,58 @@ def pattern_availability():
         json/pattern_counters.json
     """
 
-    json_path = JSON_FOLDER / "pattern_counters.json"
-    data = load_json(json_path)
-
-    if not data:
+    cached = load_pattern_counters()
+    if not cached:
         abort(404)
 
     return render_template(
         "patterns.html",
-        data=data,
-        tlds=data.get("tlds", {}),
-        patterns=data.get("patterns", {}),
+        data=cached["meta"],
+        patterns=cached["patterns"],
+        pattern_keys=cached["pattern_keys"],
+        rows=cached["rows"],
     )
+
+
+_patterns_cache = {"mtime": None, "value": None}
+_patterns_cache_lock = threading.Lock()
+
+
+def load_pattern_counters():
+    """
+    pattern_counters.json is ~800KB but the page only needs the available
+    count per pattern, so it's reduced to compact rows once per file change.
+    """
+    path = JSON_FOLDER / "pattern_counters.json"
+    try:
+        mtime = path.stat().st_mtime
+    except OSError:
+        return None
+
+    with _patterns_cache_lock:
+        if _patterns_cache["mtime"] == mtime:
+            return _patterns_cache["value"]
+
+    data = load_json(path)
+    if not data:
+        return None
+
+    patterns = data.get("patterns", {})
+    keys = list(patterns)
+    rows = [
+        [tld] + [int(info.get("patterns", {}).get(k, {}).get("available", 0)) for k in keys]
+        for tld, info in sorted(data.get("tlds", {}).items())
+    ]
+    value = {
+        "meta": {k: v for k, v in data.items() if k != "tlds"},
+        "patterns": patterns,
+        "pattern_keys": keys,
+        "rows": rows,
+    }
+
+    with _patterns_cache_lock:
+        _patterns_cache.update(mtime=mtime, value=value)
+    return value
 
 # ==============================================================
 # JSON/CSV API
