@@ -299,6 +299,9 @@ def process_tld(tld, zone_file):
         sorted_gz = work_dir / "domains.txt.gz"
         new_txt = work_dir / "new.txt"
         deleted_txt = work_dir / "deleted.txt"
+        # awk only creates these on the first line it writes, a zone with nothing new or deleted would have none
+        new_txt.touch()
+        deleted_txt.touch()
 
         extract_sorted_domains(zone_file, tld, sorted_gz, work_dir)
 
