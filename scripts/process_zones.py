@@ -81,13 +81,17 @@ LOG_FILE = REPO_ROOT / "zone_processing_log.txt"
 NOW = datetime.now(TIMEZONE)
 TODAY = NOW.strftime("%Y-%m-%d")
 
-# The container is capped at 1GB RAM, shared with the website. Each worker
-# runs one `sort`, so WORKERS x the largest SORT_MEMORY must stay well below
-# that. `sort` spills to (gzip-compressed) temp files beyond this.
+# The container is capped at 2GB RAM, shared with the website. Each worker
+# runs one `sort`, and zones go biggest first, so the worst case is .com
+# (HUGE) next to another LARGE zone: 1G + 384M plus the awk/gzip stages and
+# the website stays well below the cap. `sort` spills to (gzip-compressed)
+# temp files beyond this; fewer spills is what makes .com faster.
 WORKERS = 2
 SORT_MEMORY_SMALL = "64M"
-SORT_MEMORY_LARGE = "256M"
+SORT_MEMORY_LARGE = "384M"
+SORT_MEMORY_HUGE = "1G"
 LARGE_ZONE_BYTES = 500_000_000
+HUGE_ZONE_BYTES = 2_000_000_000  # only .com (~5GB gzipped)
 
 # Dated lists/json older than this are removed. Full domain snapshots are
 # kept only for the newest date per TLD regardless (they're only needed
@@ -298,7 +302,12 @@ def extract_snapshot(zone_file, tld, ns_gz, domains_gz, work_dir):
     expect).
     """
     size = zone_file.stat().st_size
-    memory = SORT_MEMORY_LARGE if size >= LARGE_ZONE_BYTES else SORT_MEMORY_SMALL
+    if size >= HUGE_ZONE_BYTES:
+        memory = SORT_MEMORY_HUGE
+    elif size >= LARGE_ZONE_BYTES:
+        memory = SORT_MEMORY_LARGE
+    else:
+        memory = SORT_MEMORY_SMALL
 
     with open(ns_gz, "wb") as out:
         run_pipeline(
