@@ -44,6 +44,7 @@ import io
 import json
 import os
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlparse
@@ -83,6 +84,11 @@ FEEDS = {
     ),
 }
 
+# The cron job runs every hour while zones get published; feeds are fetched
+# at most this often and reused from disk in between.
+FEED_CACHE_FOLDER = REPO_ROOT / "tmp_feeds"
+FEED_MAX_AGE = 3 * 60 * 60  # seconds
+
 HEADERS = {"User-Agent": "domain-lists-threat-check/1.0"}
 REQUEST_TIMEOUT = 60
 
@@ -94,10 +100,22 @@ SAFEBROWSING_THREAT_TYPES = [
 ]
 
 
-def fetch_feed(url):
+def fetch_feed(source, url):
+    """Feed text, from the on-disk cache if it is younger than FEED_MAX_AGE."""
+    cache = FEED_CACHE_FOLDER / f"{source}.txt"
+    try:
+        if time.time() - cache.stat().st_mtime < FEED_MAX_AGE:
+            return cache.read_text(encoding="utf-8"), True
+    except OSError:
+        pass
+
     resp = requests.get(url, headers=HEADERS, timeout=REQUEST_TIMEOUT)
     resp.raise_for_status()
-    return resp.text
+    FEED_CACHE_FOLDER.mkdir(parents=True, exist_ok=True)
+    tmp = cache.with_suffix(".tmp")
+    tmp.write_text(resp.text, encoding="utf-8")
+    tmp.replace(cache)
+    return resp.text, False
 
 
 def extract_hostnames(feed_text, fmt):
@@ -165,9 +183,13 @@ def match_domain(hostname, domain_set):
 
 
 def check_safebrowsing(domains, api_key):
-    """Query Google Safe Browsing in batches of up to 500 URLs; return the flagged subset."""
+    """
+    Query Google Safe Browsing in batches of up to 500 URLs.
+    Returns (flagged subset, domains in batches that failed).
+    """
     domains = sorted(domains)
     flagged = set()
+    failed = set()
 
     batch_count = (len(domains) + SAFEBROWSING_BATCH_SIZE - 1) // SAFEBROWSING_BATCH_SIZE
     print(f"safebrowsing: checking {len(domains):,} domains in {batch_count:,} batches")
@@ -195,6 +217,7 @@ def check_safebrowsing(domains, api_key):
         except requests.RequestException as e:
             batch_num = i // SAFEBROWSING_BATCH_SIZE + 1
             print(f"safebrowsing: batch {batch_num}/{batch_count} FAILED - {e}", file=sys.stderr)
+            failed.update(batch)
             continue
 
         for match in resp.json().get("matches", []):
@@ -203,7 +226,15 @@ def check_safebrowsing(domains, api_key):
             if host:
                 flagged.add(host.lower().rstrip("."))
 
-    return flagged
+    return flagged, failed
+
+
+def read_domain_list(path):
+    try:
+        with gzip.open(path, "rt", encoding="utf-8", errors="replace") as f:
+            return {line.strip() for line in f if line.strip()}
+    except OSError:
+        return set()
 
 
 def write_domain_list(domains, out_file):
@@ -238,14 +269,14 @@ def main():
 
     for source, (url, fmt) in FEEDS.items():
         try:
-            feed_text = fetch_feed(url)
+            feed_text, cached = fetch_feed(source, url)
         except Exception as e:
             print(f"{source}: FAILED to fetch feed - {e}", file=sys.stderr)
             matches_by_source[source] = set()
             continue
 
         hostnames = extract_hostnames(feed_text, fmt)
-        print(f"{source}: {len(hostnames):,} hostnames in feed")
+        print(f"{source}: {len(hostnames):,} hostnames in feed{' (cached)' if cached else ''}")
 
         matched = set()
         for host in hostnames:
@@ -264,12 +295,20 @@ def main():
     if api_key:
         # only the latest day: it's an API call per 500 domains, and a long gap since the
         # previous snapshot can make one day's "new" list millions of domains
+        # The day's new list grows during the day as zones get published, so
+        # only domains not submitted yet are checked (the API quota is per call).
         latest_domains, _ = load_new_domains(date, days=1)
+        checked_file = out_folder / ".safebrowsing_checked.txt.gz"
+        checked = read_domain_list(checked_file)
+        previous = read_domain_list(out_folder / "safebrowsing.txt.gz")
         try:
-            matched = check_safebrowsing(latest_domains, api_key)
+            flagged, failed = check_safebrowsing(latest_domains - checked, api_key)
+            matched = previous | flagged
+            # failed batches are not marked as checked, so the next run retries them
+            write_domain_list(checked | (latest_domains - failed), checked_file)
         except Exception as e:
             print(f"safebrowsing: FAILED - {e}", file=sys.stderr)
-            matched = set()
+            matched = previous
 
         matches_by_source["safebrowsing"] = matched
         all_matches |= matched

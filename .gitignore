@@ -26,5 +26,6 @@ website/static/og/
 
 # Scratch space + state written by scripts/process_zones.py
 tmp/
+tmp_feeds/
 .process_zones.lock
 .last_alert

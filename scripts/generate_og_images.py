@@ -16,7 +16,7 @@ import re
 import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 
 from PIL import Image, ImageDraw, ImageFont
 
@@ -24,6 +24,10 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 SITEMAP_FILE = REPO_ROOT / "sitemap.xml"
 JSON_FOLDER = REPO_ROOT / "json"
 OUTPUT_FOLDER = REPO_ROOT / "website" / "static" / "og"
+
+MANIFEST_FILE = OUTPUT_FOLDER / ".manifest.json"
+# bump when render_image() changes, so every image is drawn again
+RENDER_VERSION = 1
 
 WIDTH, HEIGHT = 1200, 630
 BG_COLOR = (2, 132, 199)          # sky-600, matches the site's brand color
@@ -112,6 +116,21 @@ def title_and_subtitle(path):
     if parts[0] == "deleted" and len(parts) == 2:
         return f"Deleted: {parts[1]}", "Recently deleted domains matching this pattern"
 
+    if parts[0] == "providers" and len(parts) == 1:
+        totals = (load_json(JSON_FOLDER / "providers.json") or {}).get("totals", {})
+        return "DNS Providers", f"Who runs the nameservers of {totals.get('domains', 0):,} domains"
+
+    if parts[0] == "providers" and len(parts) == 2:
+        label = unquote(parts[1])
+        names = (load_json(REPO_ROOT / "providers.json") or {}).get("names", {})
+        info = (load_json(JSON_FOLDER / "providers.json") or {}).get("providers", {}).get(label, {})
+        name = " + ".join(names.get(p, p) for p in label.split("+"))
+        return name, f"{info.get('domains', 0):,} domains, DNS provider stats"
+
+    if parts[0] == "moves":
+        summary = load_json(JSON_FOLDER / "summary.json") or {}
+        return "DNS Provider Moves", f"{summary.get('moved', 0):,} domains changed DNS provider"
+
     if parts[0] == "tld" and len(parts) >= 2:
         tld = parts[1]
         data = load_json(JSON_FOLDER / tld / "latest") or {}
@@ -167,14 +186,31 @@ def render_image(title, subtitle, out_path):
 def main():
     OUTPUT_FOLDER.mkdir(parents=True, exist_ok=True)
 
-    count = 0
+    # slug -> [title, subtitle] of the image on disk: an image is only drawn
+    # again when its text changed (the cron job runs every hour).
+    manifest = load_json(MANIFEST_FILE) or {}
+    if manifest.get("version") != RENDER_VERSION:
+        manifest = {}
+    images = manifest.get("images", {})
+
+    count = drawn = 0
+    seen = {}
     for path in sitemap_paths():
         slug = slugify_path(path)
-        title, subtitle = title_and_subtitle(path)
-        render_image(title, subtitle, OUTPUT_FOLDER / f"{slug}.png")
+        text = list(title_and_subtitle(path))
+        out_path = OUTPUT_FOLDER / f"{slug}.png"
+        if images.get(slug) != text or not out_path.exists():
+            render_image(text[0], text[1], out_path)
+            drawn += 1
+        seen[slug] = text
         count += 1
 
-    print(f"Generated {count} OG images -> {OUTPUT_FOLDER}")
+    tmp = Path(str(MANIFEST_FILE) + ".tmp")
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump({"version": RENDER_VERSION, "images": seen}, f)
+    tmp.replace(MANIFEST_FILE)
+
+    print(f"OG images: {count} in sitemap, {drawn} drawn, {count - drawn} unchanged -> {OUTPUT_FOLDER}")
     return 0
 
 

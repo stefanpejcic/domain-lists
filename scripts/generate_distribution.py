@@ -311,7 +311,18 @@ def main():
 
     log(f"Found {len(domain_files):,} TLD files.")
 
+    # Only TLDs whose snapshot changed since the last run are counted again
+    # (the cron job runs every hour as zones get published); the rest are
+    # copied from the previous output.
+    previous = {}
+    try:
+        with open(OUTPUT_FILE, "r", encoding="utf-8") as f:
+            previous = json.load(f).get("tlds", {})
+    except (OSError, ValueError):
+        pass
+
     tlds = {}
+    reused = 0
 
     # ----------------------------------------------------------
     # Process every TLD
@@ -323,6 +334,18 @@ def main():
 
         if tld.endswith(".txt.gz"):
             tld = tld[:-7]
+
+        stat = domain_file.stat()
+        source = {
+            "file": str(domain_file.relative_to(LISTS_FOLDER)),
+            "mtime": int(stat.st_mtime),
+            "size": stat.st_size,
+        }
+        old = previous.get(tld)
+        if old and old.get("source") == source:
+            tlds[tld] = old
+            reused += 1
+            continue
 
         result = process_tld(domain_file)
 
@@ -347,6 +370,7 @@ def main():
         tlds[tld] = {
             "domains": result["domains"],
             "patterns": patterns,
+            "source": source,
         }
 
         log(
@@ -394,7 +418,7 @@ def main():
 
     log("==============================================")
     log(f"Saved -> {OUTPUT_FILE}")
-    log(f"TLDs processed: {len(tlds):,}")
+    log(f"TLDs: {len(tlds):,} ({len(tlds) - reused:,} counted, {reused:,} unchanged)")
     log(f"Completed in {elapsed:.2f} seconds.")
     log("==============================================")
 
