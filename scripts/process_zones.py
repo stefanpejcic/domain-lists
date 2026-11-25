@@ -105,6 +105,10 @@ DROP_AFTER_DAYS = 35
 PENDING_MIN_DAYS = 28
 PENDING_MAX_DAYS = 38  # must stay below KEEP_DAYS: the lists have to still exist
 PENDING_FOLDER = LISTS_FOLDER / "pending_drop"
+# A date's deleted list only dates a departure if the snapshot before it is
+# at most this many days older (after a gap in processing it holds weeks of
+# departures, most of them long dropped already).
+PENDING_MAX_GAP_DAYS = 3
 
 # CZDS publishes each zone once a day. A zone whose snapshot is younger
 # than this isn't even asked about (one HEAD request per zone otherwise,
@@ -630,12 +634,16 @@ def update_pending_drop(tld, date):
     newest = (day - timedelta(days=PENDING_MIN_DAYS)).strftime("%Y-%m-%d")
 
     pending = {}
+    previous_day = None
     for folder in reversed(date_folders()):  # oldest first
+        folder_day = datetime.strptime(folder.name, "%Y-%m-%d")
+        gap = (folder_day - previous_day).days if previous_day else None
+        previous_day = folder_day
         if not (oldest <= folder.name <= date):
             continue
         for domain in read_list(folder / "new" / f"{tld}.txt.gz"):
             pending.pop(domain, None)
-        if folder.name <= newest:
+        if folder.name <= newest and gap is not None and gap <= PENDING_MAX_GAP_DAYS:
             for domain in read_list(folder / "deleted" / f"{tld}.txt.gz"):
                 pending[domain] = folder.name
 

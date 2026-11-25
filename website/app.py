@@ -251,8 +251,9 @@ def load_providers():
         if _providers_cache["mtime"] == mtime:
             return _providers_cache["value"]
     data = load_json(path)
-    with _providers_cache_lock:
-        _providers_cache.update(mtime=mtime, value=data)
+    if data:  # an unreadable file is retried on the next request, not cached
+        with _providers_cache_lock:
+            _providers_cache.update(mtime=mtime, value=data)
     return data
 
 
