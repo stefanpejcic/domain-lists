@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+
+{% set name = label | provider_name %}
+{% block title %}{{ name }}: {{ "{:,}".format(info.domains) }} domains, gains and losses ({{ data.date }}) | zonelists.com{% endblock %}
+
+{% block description %}{{ name }} runs the nameservers of {{ "{:,}".format(info.domains) }} domains in {{ info.tlds }} TLDs ({{ "%.2f" | format(share) }}% of all domains we track). Daily new registrations, domains moved in and out, and the providers they came from or left for.{% endblock %}
+
+{% block header_left %}
+<a href="{{ url_for('providers_page') }}" class="crumb">DNS providers</a> <span class="crumb">{{ name }}</span>
+{% endblock %}
+
+{% block header_right %}
+Last update: <span class="font-medium text-gray-900">{{ data.last_updated }}</span>
+{% endblock %}
+
+{% macro provider_link(l, known) -%}
+{% if l in known %}<a href="{{ url_for('provider_page', label=l) }}" class="font-medium text-sky-600 hover:text-sky-800">{{ l | provider_name }}</a>{% else %}<span class="font-medium text-gray-700">{{ l | provider_name }}</span>{% endif %}
+{%- endmacro %}
+
+{% block content %}
+
+        <div class="max-w-3xl mx-auto text-center mb-10">
+            <h1 class="mx-auto text-3xl font-bold text-gray-900 sm:text-4xl sm:leading-none sm:tracking-tight">
+                {{ name }}
+            </h1>
+            <p class="mt-2 text-xl text-gray-600">
+                Nameservers for <span class="font-bold">{{ "{:,}".format(info.domains) }}</span> domains in {{ info.tlds }} TLDs,
+                {{ "%.2f" | format(share) }}% of all domains we track.
+            </p>
+            <p class="mt-3 text-sm text-gray-500">
+                Nameserver label <code class="font-mono">{{ label }}</code>{% if label is parking %}, a parking / for-sale service{% endif %}.
+                Snapshot of {{ data.date }}.
+            </p>
+        </div>
+
+        {% set net = info.gained - info.lost %}
+        <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-10">
+            <div class="rounded-xl border bg-white p-5 shadow-sm">
+                <div class="text-xs font-medium uppercase text-gray-400">New registrations today</div>
+                <div class="mt-1 text-2xl font-bold text-emerald-600">+{{ "{:,}".format(info.new) }}</div>
+            </div>
+            <div class="rounded-xl border bg-white p-5 shadow-sm">
+                <div class="text-xs font-medium uppercase text-gray-400">Moved in / out today</div>
+                <div class="mt-1 text-2xl font-bold text-gray-900">
+                    <span class="text-emerald-600">+{{ "{:,}".format(info.gained) }}</span>
+                    <span class="text-gray-300">/</span>
+                    <span class="text-red-600">-{{ "{:,}".format(info.lost) }}</span>
+                </div>
+                <div class="text-sm {{ 'text-emerald-600' if net >= 0 else 'text-red-600' }}">net {{ "{:+,}".format(net) }}</div>
+            </div>
+            <div class="rounded-xl border bg-white p-5 shadow-sm">
+                <div class="text-xs font-medium uppercase text-gray-400">Left the zone today</div>
+                <div class="mt-1 text-2xl font-bold text-red-600">-{{ "{:,}".format(info.deleted) }}</div>
+                <div class="text-sm text-gray-500">expired, on hold or deleted</div>
+            </div>
+            <div class="rounded-xl border bg-white p-5 shadow-sm">
+                <div class="text-xs font-medium uppercase text-gray-400">DNSSEC signed</div>
+                <div class="mt-1 text-2xl font-bold text-gray-900">{{ "%.1f" | format(info.dnssec / info.domains * 100) if info.domains else "0.0" }}%</div>
+                <div class="text-sm text-gray-500">{{ "{:,}".format(info.dnssec) }} domains</div>
+            </div>
+        </div>
+
+        <div class="mb-10 text-center">
+            <a href="{{ url_for('moves', search=label) }}" class="inline-flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700">
+                Browse today's domains that moved to or from {{ name }} →
+            </a>
+        </div>
+
+        <div class="grid gap-6 lg:grid-cols-2 mb-10">
+            {% for title, rows, side in [("Moved in from", flows_in, "from"), ("Moved out to", flows_out, "to")] %}
+            <div class="rounded-xl border bg-white shadow-sm overflow-x-auto">
+                <h2 class="px-5 pt-5 text-lg font-semibold text-gray-900">{{ title }}</h2>
+                <table class="mt-3 w-full text-left text-sm border-collapse">
+                    <tbody class="divide-y">
+                        {% for f in rows %}
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-5 py-3">{{ provider_link(f[side], data.providers) }}</td>
+                            <td class="px-5 py-3 text-right font-medium">{{ "{:,}".format(f.count) }}</td>
+                        </tr>
+                        {% else %}
+                        <tr><td class="px-5 py-6 text-center text-gray-400">None among today's biggest moves.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% endfor %}
+        </div>
+
+        <div class="rounded-xl border bg-white shadow-sm overflow-x-auto">
+            <h2 class="px-5 pt-5 text-lg font-semibold text-gray-900">Largest TLDs on {{ name }}</h2>
+            <table class="mt-3 w-full text-left text-sm border-collapse">
+                <thead class="bg-gray-50 text-xs uppercase text-gray-500">
+                    <tr>
+                        <th class="px-5 py-3">TLD</th>
+                        <th class="px-5 py-3 text-right">Domains</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y">
+                    {% for tld, count in info.by_tld.items() %}
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-5 py-3"><a href="/tld/{{ tld }}/all" class="font-medium text-sky-600 hover:text-sky-800">.{{ tld | to_unicode }}</a></td>
+                        <td class="px-5 py-3 text-right font-medium">{{ "{:,}".format(count) }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+{% endblock %}

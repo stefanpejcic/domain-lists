@@ -23,6 +23,7 @@ REPO_ROOT = BASE_DIR.parent
 JSON_FOLDER = REPO_ROOT / "json"
 LISTS_FOLDER = REPO_ROOT / "lists"
 KEYWORDS_CONFIG = REPO_ROOT / "keywords.json"
+PROVIDERS_CONFIG = REPO_ROOT / "providers.json"
 
 load_dotenv(BASE_DIR / ".env")
 # Primary domain for canonical/og URLs, so the site can be served on several domains
@@ -30,7 +31,8 @@ SITE_URL = os.getenv("SITE_URL", "").strip().rstrip("/")
 DOMAINS_PER_PAGE = 100
 # a search or deep page on a huge list (.com is 168M domains) stops after this, so it can't tie up a server thread
 SEARCH_TIME_LIMIT = 3  # seconds
-DOWNLOAD_KINDS = ("domains", "new", "deleted")
+# new_active = new minus domains on parking nameservers; moved = domain<TAB>old provider<TAB>new provider
+DOWNLOAD_KINDS = ("domains", "new", "deleted", "new_active", "moved")
 DOWNLOAD_TOKEN_TTL = 10 * 60  # seconds a prepared download link stays valid
 TLDS_CACHE_TTL = 30 * 60  # seconds the homepage TLD list is cached for
 
@@ -50,6 +52,8 @@ KIND_LABELS = {
     "domains": "All",
     "new": "New",
     "deleted": "Deleted",
+    "new_active": "New (not parked)",
+    "moved": "Moved",
 }
 
 VALID_PATTERNS = {
@@ -195,6 +199,66 @@ def load_keywords():
     return [k.strip().lower() for k in data.get("keywords", []) if k.strip()]
 
 
+_providers_config_cache = {"mtime": None, "value": ({}, set())}
+
+
+def load_providers_config():
+    """(display names, parking labels) from providers.json, reloaded when it changes."""
+    try:
+        mtime = PROVIDERS_CONFIG.stat().st_mtime
+    except OSError:
+        return {}, set()
+    if _providers_config_cache["mtime"] != mtime:
+        data = load_json(PROVIDERS_CONFIG) or {}
+        _providers_config_cache.update(mtime=mtime, value=(
+            data.get("names", {}),
+            {p.lower() for p in data.get("parking", [])},
+        ))
+    return _providers_config_cache["value"]
+
+
+def provider_name(label):
+    """Display name for a provider label ("a+b" for domains on several)."""
+    names, _ = load_providers_config()
+    return " + ".join(names.get(part, part) for part in str(label).split("+"))
+
+
+def is_parking(label):
+    _, parking = load_providers_config()
+    return all(part in parking for part in str(label).split("+"))
+
+
+app.jinja_env.filters["provider_name"] = provider_name
+app.jinja_env.tests["parking"] = is_parking
+
+
+_providers_cache = {"mtime": None, "value": None}
+_providers_cache_lock = threading.Lock()
+
+
+def load_providers():
+    """json/providers.json (scripts/generate_providers.py), cached per file change."""
+    path = JSON_FOLDER / "providers.json"
+    try:
+        mtime = path.stat().st_mtime
+    except OSError:
+        return None
+    with _providers_cache_lock:
+        if _providers_cache["mtime"] == mtime:
+            return _providers_cache["value"]
+    data = load_json(path)
+    with _providers_cache_lock:
+        _providers_cache.update(mtime=mtime, value=data)
+    return data
+
+
+def load_tld_providers(tld, date):
+    """Per-TLD provider stats for a snapshot date (process_zones.py)."""
+    if not date:
+        return None
+    return load_json(JSON_FOLDER / tld / "providers" / f"{date}.json")
+
+
 def latest_date_with_keywords():
     """
     Find the most recent date folder that has keyword lists (mirrors
@@ -227,10 +291,10 @@ def latest_date_with_threats():
 def get_download_sizes(tld):
     date = latest_date_with_domains(tld)
     if date is None:
-        return {"domains": None, "new": None, "deleted": None}
+        return dict.fromkeys(DOWNLOAD_KINDS)
 
     sizes = {}
-    for kind in ("domains", "new", "deleted"):
+    for kind in DOWNLOAD_KINDS:
         path = LISTS_FOLDER / date / kind / f"{tld}.txt.gz"
         sizes[kind] = path.stat().st_size if path.exists() else None
     return sizes
@@ -532,11 +596,13 @@ def trending(keyword):
 
         file_path = LISTS_FOLDER / date / "keywords" / f"{keyword}.txt.gz"
         file_size = file_path.stat().st_size if file_path.exists() else 0
+        active_counts = summary_data.get("active") or {}
 
         return render_template(
             "trending.html",
             keyword=keyword,
             count=counts.get(keyword, 0),
+            active_count=active_counts.get(keyword),
             date=date,
             file_size=file_size,
             keywords=keywords,
@@ -575,7 +641,8 @@ def browse_trending(keyword):
     if not date:
         return jsonify({"domains": [], "has_more": False, "page": page})
 
-    file_path = LISTS_FOLDER / date / "keywords" / f"{keyword}.txt.gz"
+    folder = "keywords_active" if request.args.get("active") == "1" else "keywords"
+    file_path = LISTS_FOLDER / date / folder / f"{keyword}.txt.gz"
     domains, has_more, matched_count = browse_domains_from_path(file_path, search, page)
 
     return browse_response(domains, has_more, page)
@@ -665,6 +732,7 @@ BROWSE_KIND_BY_SLUG = {
     "new": "new",
     "deleted": "deleted",
 }
+TLD_PROVIDERS_SHOWN = 15
 
 
 @app.route("/tld/<tld>/<slug>")
@@ -681,6 +749,8 @@ def tld_browse_page(tld, slug):
         abort(404)
 
     sizes = get_download_sizes(tld)
+    providers = load_tld_providers(tld, data.get("date")) or {}
+    top = list((providers.get("providers") or {}).items())[:TLD_PROVIDERS_SHOWN]
 
     return render_template(
         "tld_browse.html",
@@ -688,6 +758,8 @@ def tld_browse_page(tld, slug):
         sizes=sizes,
         kind=kind,
         slug=slug,
+        providers=top,
+        flows=list((providers.get("flows") or {}).items())[:10],
     )
 
 
@@ -696,7 +768,7 @@ def browse_tld_domains(tld):
     tld = validate_tld(tld)
 
     kind = request.args.get("kind", "domains")
-    if kind not in ("domains", "new", "deleted"):
+    if kind not in DOWNLOAD_KINDS:
         abort(404)
 
     search = request.args.get("search", "")
@@ -901,6 +973,119 @@ def browse_dropped():
 
 
 # ==============================================================
+# DNS providers and moves between them
+#
+# process_zones.py reduces each domain's nameservers to a provider label
+# (ns1.cloudflare.com -> cloudflare) and diffs it against the previous
+# snapshot; scripts/generate_providers.py combines the per-TLD counts into
+# json/providers.json. Moves are lists/<date>/moved/all.txt.gz, one
+# "domain<TAB>from<TAB>to" per line.
+# ==============================================================
+PROVIDER_LABEL_RE = re.compile(r"^[a-z0-9()+_-]{1,100}$")
+
+
+def flow_rows(flows, limit, provider=None, direction=None):
+    rows = []
+    for key, count in flows.items():
+        src, _, dst = key.partition(">")
+        if provider and direction == "in" and dst != provider:
+            continue
+        if provider and direction == "out" and src != provider:
+            continue
+        rows.append({"from": src, "to": dst, "count": count})
+        if len(rows) >= limit:
+            break
+    return rows
+
+
+@app.route("/providers")
+def providers_page():
+    data = load_providers()
+    if not data:
+        abort(404)
+
+    providers = data.get("providers", {})
+    by_domains = sorted(providers.items(), key=lambda kv: kv[1]["domains"], reverse=True)[:100]
+    net = sorted(providers.items(), key=lambda kv: kv[1]["gained"] - kv[1]["lost"], reverse=True)
+    return render_template(
+        "providers.html",
+        data=data,
+        totals=data.get("totals", {}),
+        providers=by_domains,
+        winners=[kv for kv in net[:10] if kv[1]["gained"] - kv[1]["lost"] > 0],
+        losers=[kv for kv in reversed(net[-10:]) if kv[1]["gained"] - kv[1]["lost"] < 0],
+        new_leaders=sorted(providers.items(), key=lambda kv: kv[1]["new"], reverse=True)[:10],
+        flows=flow_rows(data.get("flows", {}), 25),
+    )
+
+
+@app.route("/providers/<label>")
+def provider_page(label):
+    label = label.lower().strip()
+    if not PROVIDER_LABEL_RE.match(label):
+        abort(404)
+    data = load_providers()
+    if not data or label not in data.get("providers", {}):
+        abort(404)
+
+    info = data["providers"][label]
+    flows = data.get("flows", {})
+    return render_template(
+        "provider.html",
+        data=data,
+        label=label,
+        info=info,
+        share=(info["domains"] / data["totals"]["domains"] * 100) if data["totals"].get("domains") else 0,
+        flows_in=flow_rows(flows, 15, label, "in"),
+        flows_out=flow_rows(flows, 15, label, "out"),
+    )
+
+
+@app.route("/moves")
+def moves():
+    summary = load_summary()
+    if summary is None:
+        abort(404)
+    date = latest_date_with_domains("all")
+    return render_template(
+        "moves.html",
+        summary=summary,
+        sizes=get_download_sizes("all"),
+        date=date,
+        search=request.args.get("search", ""),
+    )
+
+
+@app.route("/moves/browse")
+def browse_moves():
+    search = request.args.get("search", "")
+    try:
+        page = max(1, int(request.args.get("page", 1)))
+    except ValueError:
+        page = 1
+
+    date = latest_date_with_domains("all")
+    if date is None:
+        return jsonify({"domains": [], "has_more": False, "page": page})
+
+    lines, has_more, _ = browse_domains(
+        "all", date, "moved", search, page)
+    rows = []
+    for line in lines:
+        domain, _, rest = line.partition("\t")
+        src, _, dst = rest.partition("\t")
+        rows.append({"domain": domain, "from": src, "to": dst,
+                     "from_name": provider_name(src), "to_name": provider_name(dst)})
+    return jsonify({
+        "moves": rows,
+        "has_more": has_more,
+        "page": page,
+        "per_page": DOMAINS_PER_PAGE,
+        "truncated": g.get("search_truncated", False),
+    })
+
+
+# ==============================================================
 # Domain Pattern Availability
 # ==============================================================
 @app.route("/patterns")
@@ -1020,8 +1205,11 @@ def api_index():
             "/api/v1/tld/<tld>": "Stats for a single TLD",
             "/api/v1/tld/<tld>/<kind>": (
                 "Direct .txt.gz download; kind is one of domains, new, "
-                "deleted. Use tld=all for every TLD combined."
+                "deleted, new_active (new minus parked), moved "
+                "(domain<TAB>old provider<TAB>new provider). Use tld=all for every TLD combined."
             ),
+            "/api/v1/providers": "DNS providers: domains, new, parked, gained/lost (moves), DNSSEC, top flows",
+            "/api/v1/provider/<label>": "One DNS provider, e.g. cloudflare, domaincontrol (GoDaddy)",
         },
         "rate_limit": f"{API_RATE_LIMIT} requests / {API_RATE_WINDOW}s per IP",
         "openapi": f"{site_url()}/api/v1/openapi.json",
@@ -1074,7 +1262,10 @@ def api_openapi():
                 "summary": "Download a domain list",
                 "description": (
                     "Gzipped text, one domain per line. kind=domains is every registered domain in the TLD, "
-                    "new is domains added since the previous daily snapshot, deleted is domains removed. "
+                    "new is domains added since the previous daily snapshot, deleted is domains removed "
+                    "from the zone (expired, on hold or without nameservers: not necessarily available), "
+                    "new_active is new minus domains on parking nameservers, moved is "
+                    "domain<TAB>old DNS provider<TAB>new DNS provider. "
                     "Use tld=all for every TLD combined."
                 ),
                 "parameters": [tld_param, {"name": "kind", "in": "path", "required": True,
@@ -1108,8 +1299,10 @@ def llms_txt():
         "",
         f"- Registered domains tracked: {n(summary.get('domains'))} across {n(summary.get('tlds'))} TLDs",
         f"- Newly registered in the latest daily snapshot: {n(summary.get('new'))}",
-        f"- Deleted in the latest daily snapshot: {n(summary.get('deleted'))}",
-        "- Updated once a day. Country-code TLDs (.uk, .de, .rs, ...) are not available from ICANN CZDS and are not included.",
+        f"- Deleted in the latest daily snapshot: {n(summary.get('deleted'))} "
+        "(removed from the zone: expired, on hold or without nameservers, so not necessarily available yet)",
+        f"- Moved to another DNS provider: {n(summary.get('moved'))}; new domains on parking nameservers: {n(summary.get('new_parked'))}",
+        "- Each zone is processed as soon as ICANN CZDS publishes it (once a day per zone). Country-code TLDs (.uk, .de, .rs, ...) are not available from ICANN CZDS and are not included.",
         "",
         "## Download a list directly",
         "",
@@ -1136,6 +1329,8 @@ def llms_txt():
         f"- [Newly registered domains by trending keyword]({base}/trending)",
         f"- [Deleted short domains by pattern]({base}/deleted)",
         f"- [Unregistered short domains per TLD]({base}/patterns)",
+        f"- [DNS provider market share, gains and losses]({base}/providers) ([JSON]({base}/api/v1/providers))",
+        f"- [Domains that moved to another DNS provider today]({base}/moves)",
         f"- Per TLD: {base}/tld/<tld>/all, {base}/tld/<tld>/new, {base}/tld/<tld>/deleted",
         "",
         "## Largest TLDs",
@@ -1147,6 +1342,25 @@ def llms_txt():
                      f"+{n(t.get('new'))} new, -{n(t.get('deleted'))} deleted")
     lines.append("")
     return Response("\n".join(lines), mimetype="text/plain")
+
+
+@app.route("/api/v1/providers")
+def api_providers():
+    data = load_providers()
+    if not data:
+        return jsonify({"error": "No data yet"}), 404
+    names, _ = load_providers_config()
+    return jsonify({**data, "names": names})
+
+
+@app.route("/api/v1/provider/<label>")
+def api_provider(label):
+    label = label.lower().strip()
+    data = load_providers()
+    if not data or label not in data.get("providers", {}):
+        return jsonify({"error": "Unknown provider"}), 404
+    return jsonify({"label": label, "name": provider_name(label), "date": data.get("date"),
+                    **data["providers"][label]})
 
 
 @app.route("/api/v1/summary")
@@ -1164,12 +1378,11 @@ def api_tlds():
     if request.args.get("format") == "csv":
         buf = io.StringIO()
         writer = csv.writer(buf)
-        writer.writerow(["tld", "domains", "new", "deleted", "last_updated"])
+        columns = ["tld", "domains", "new", "deleted", "new_parked", "moved", "dnssec",
+                   "zone_published", "last_updated"]
+        writer.writerow(columns)
         for t in tlds:
-            writer.writerow([
-                t.get("tld"), t.get("domains"), t.get("new"),
-                t.get("deleted"), t.get("last_updated"),
-            ])
+            writer.writerow([t.get(c) for c in columns])
         return Response(
             buf.getvalue(),
             mimetype="text/csv",

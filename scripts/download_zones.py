@@ -20,6 +20,7 @@ import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
+from email.utils import parsedate_to_datetime
 from pathlib import Path
 
 import requests
@@ -102,6 +103,28 @@ def approved_tlds(token):
             tlds.append(name[: -len(".zone")].lower())
 
     return sorted(set(tlds))
+
+
+def zone_last_modified(tld, token):
+    """
+    When CZDS last published this zone (aware datetime), from a HEAD
+    request, or None if the response has no usable Last-Modified.
+    Raises on HTTP errors.
+    """
+    r = requests.head(
+        ZONE_URL.format(tld=tld),
+        headers={"Authorization": f"Bearer {token}"},
+        timeout=TIMEOUT,
+        allow_redirects=True,
+    )
+    r.raise_for_status()
+    value = r.headers.get("Last-Modified")
+    if not value:
+        return None
+    try:
+        return parsedate_to_datetime(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def download_zone(tld, token, output_folder=DOWNLOAD_FOLDER):

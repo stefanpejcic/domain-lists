@@ -3,19 +3,34 @@
 Download, parse and diff ICANN CZDS zone files.
 
 For every approved zone, one at a time per worker:
-    download -> extract delegated domains -> sort -u -> diff with the
-    previous snapshot -> write lists + json -> delete the zone file.
+    download -> extract delegated domains with their DNS provider and
+    DNSSEC flag -> sort -u -> join with the previous snapshot (new,
+    deleted, moved to another provider) -> write lists + json -> delete
+    the zone file.
+
+A zone is processed when CZDS publishes a new version of it (its
+Last-Modified is newer than our snapshot), not on a fixed schedule:
+registries publish anywhere from 00:00 to ~10:00 UTC and the time drifts,
+so a fixed daily run sometimes got yesterday's file twice (0 new / 0
+deleted) and the day after showed two days of changes. Each snapshot is
+dated by the zone's own Last-Modified (Europe/Belgrade), and the cron job
+runs every hour; runs where nothing was published exit with code 2.
 
 Zones are streamed through gzip/awk/sort/comm, so neither RAM nor disk ever
 has to hold more than one zone's worth of data (com is ~5GB gzipped,
 ~25GB uncompressed).
 
-Re-running on the same day only picks up zones that are not done yet, so the
-cron job can run several times a day: later runs retry failures and
-otherwise exit immediately with code 2.
+Per snapshot date, lists/<date>/ holds:
+    domains/<tld>.txt.gz     every delegated domain (one per line)
+    ns/<tld>.txt.gz          domain<TAB>provider<TAB>dnssec(0/1), the
+                             newest one per TLD only (needed for the next diff)
+    new/, deleted/           domains added / removed since the previous snapshot
+    new_active/              new domains that are not on a parking provider
+    moved/                   domain<TAB>old provider<TAB>new provider
+and json/<tld>/providers/<date>.json the per-provider counts.
 
 Usage:
-    process_zones.py              # every approved zone not yet done today
+    process_zones.py              # every approved zone with a newer CZDS version
     process_zones.py com net      # only these (re-processed even if done)
     process_zones.py --force      # re-process everything
     process_zones.py --local      # process zone files already in downloads/
@@ -33,11 +48,11 @@ import sys
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from download_zones import DOWNLOAD_FOLDER, approved_tlds, download_zone, get_token
+from download_zones import DOWNLOAD_FOLDER, approved_tlds, download_zone, get_token, zone_last_modified
 from notify import send_alert
 
 # ==============================================================
@@ -54,6 +69,7 @@ TMP_FOLDER = REPO_ROOT / "tmp"
 LOCK_FILE = REPO_ROOT / ".process_zones.lock"
 LAST_ALERT_FILE = REPO_ROOT / ".last_alert"
 CZDS_ZONES_FILE = JSON_FOLDER / "czds_zones.json"
+PROVIDERS_CONFIG = REPO_ROOT / "providers.json"
 
 TIMEZONE_NAME = "Europe/Belgrade"
 TIMEZONE = ZoneInfo(TIMEZONE_NAME)
@@ -76,31 +92,131 @@ LARGE_ZONE_BYTES = 500_000_000
 # for the next diff and for downloads).
 KEEP_DAYS = 30
 
+# CZDS publishes each zone once a day. A zone whose snapshot is younger
+# than this isn't even asked about (one HEAD request per zone otherwise,
+# every hour, until the registry publishes).
+RECHECK_AFTER = timedelta(hours=20)
+HEAD_WORKERS = 4
+
+# How many providers / provider-to-provider flows each TLD keeps in its
+# providers json (the long tail is mostly one-off self-hosted names).
+TOP_PROVIDERS = 500
+TOP_FLOWS = 300
+
 # Force byte-order collation: `comm` requires its inputs sorted exactly
 # the way `sort` sorted them.
 C_ENV = dict(os.environ, LC_ALL="C")
 
-# Print delegated (NS) owner names that sit under the zone, minus the
-# trailing dot. Zone files are sorted by owner, so skipping repeats of the
-# previous owner drops most duplicates before they ever reach `sort`.
+# For every NS and DS record whose owner sits under the zone, print
+#     domain<TAB>N<provider>   or   domain<TAB>D
+# where provider is the nameserver host reduced to its registrable label
+# without trailing digits (ns1.cloudflare.com -> cloudflare,
+# ns-12.awsdns-34.co.uk -> awsdns, dns1.registrar-servers.com ->
+# registrar-servers), or "(self)" when the domain is its own nameserver
+# (ns1.example.com for example.com). Zone files are mostly sorted by owner,
+# so skipping repeats of the previous line drops most duplicates (e.g.
+# ns1 + ns2 of the same provider) before they ever reach `sort`.
 AWK_EXTRACT = r"""
-tolower($4) == "ns" {
+function provider(host,   n, a, i, lab) {
+    host = tolower(host)
+    sub(/\.$/, "", host)
+    n = split(host, a, ".")
+    if (n < 2) return host
+    i = n - 1
+    if (n >= 3 && length(a[n]) == 2 && a[n-1] ~ /^(co|com|net|org|gov|edu|ac|ne|or|gen|biz|info|ltd|plc|web|nom)$/)
+        i = n - 2
+    lab = a[i]
+    sub(/-?[0-9]+$/, "", lab)
+    if (lab == "") lab = a[i]
+    return lab
+}
+{
+    t = tolower($4)
+    if (t != "ns" && t != "ds") next
     o = tolower($1)
-    if (o == last) next
-    last = o
     n = length(o)
-    if (n > length(suf) && substr(o, n - length(suf) + 1) == suf)
-        print substr(o, 1, n - 1)
+    if (n <= length(suf) || substr(o, n - length(suf) + 1) != suf) next
+    d = substr(o, 1, n - 1)
+    if (t == "ns") {
+        p = provider($5)
+        if (p == substr(d, 1, index(d, ".") - 1)) p = "(self)"
+        line = d "\tN" p
+    } else {
+        line = d "\tD"
+    }
+    if (line == last) next
+    last = line
+    print line
 }
 """
 
-# Split `comm` output: no indent = only in current (new),
-# one tab = only in previous (deleted), two tabs = in both.
+# Collapse the sorted, unique records of each domain into
+#     domain<TAB>provider[+provider...]<TAB>dnssec
+# on stdout and the bare domain into `dom` (a shell command). Domains with
+# a DS record but no NS (not delegated) are skipped, like before.
+AWK_AGGREGATE = r"""
+BEGIN { FS = OFS = "\t" }
+function flush() {
+    if (cur != "" && provs != "") {
+        print cur, provs, ds
+        print cur | dom
+    }
+}
+$1 != cur { flush(); cur = $1; provs = ""; ds = 0 }
+$2 == "D" { ds = 1; next }
+{ p = substr($2, 2); provs = (provs == "" ? p : provs "+" p) }
+END {
+    flush()
+    if (close(dom) != 0) exit 1
+}
+"""
+
+# Input: `join -a1 -a2 -e - -o 0,1.2,1.3,2.2,2.3 current previous`, i.e.
+#     domain  cur_provider  cur_dnssec  prev_provider  prev_dnssec
+# with "-" for the side the domain is missing from. A previous snapshot
+# from before provider tracking has prev_provider "?" (unknown: never a
+# move). Writes the new/deleted/new_active/moved lists (when write=1) and
+# prints the counters:
+#     S total new deleted moved new_parked dnssec
+#     P provider domains new new_parked gained lost deleted dnssec
+#     F from>to count
 AWK_DIFF = r"""
-/^\t\t/ { common++; next }
-/^\t/   { deleted++; if (write) print substr($0, 2) > del; next }
-        { added++; if (write) print > new }
-END     { printf "%d %d %d\n", common, added, deleted }
+BEGIN {
+    FS = "\t"
+    n = split(parking, a, ",")
+    for (i = 1; i <= n; i++) park[a[i]] = 1
+}
+function parked(p,   n, a, i) {
+    n = split(p, a, "+")
+    for (i = 1; i <= n; i++) if (!(a[i] in park)) return 0
+    return 1
+}
+$2 == "-" {
+    deleted++; seen[$4] = 1; dp[$4]++
+    if (write) print $1 > del
+    next
+}
+{
+    total++; seen[$2] = 1; tot[$2]++
+    if ($3 == 1) { dsn++; dsp[$2]++ }
+}
+$4 == "-" {
+    added++; np[$2]++
+    if (parked($2)) { nparked++; npp[$2]++ }
+    else if (write) print $1 > act
+    if (write) print $1 > new
+    next
+}
+$4 != "?" && $4 != $2 {
+    moved++; seen[$4] = 1; gain[$2]++; lose[$4]++; flow[$4 ">" $2]++
+    print $1 "\t" $4 "\t" $2 > mv
+}
+END {
+    printf "S\t%d\t%d\t%d\t%d\t%d\t%d\n", total, added, deleted, moved, nparked, dsn
+    for (p in seen)
+        printf "P\t%s\t%d\t%d\t%d\t%d\t%d\t%d\t%d\n", p, tot[p], np[p], npp[p], gain[p], lose[p], dp[p], dsp[p]
+    for (f in flow) printf "F\t%s\t%d\n", f, flow[f]
+}
 """
 
 # ==============================================================
@@ -151,47 +267,84 @@ def run_pipeline(commands, stdout):
         raise RuntimeError(f"`{names}` failed with exit codes {codes}")
 
 
-def extract_sorted_domains(zone_file, tld, out_gz, work_dir):
-    """zone .gz -> sorted, unique domain list .gz"""
+def extract_snapshot(zone_file, tld, ns_gz, domains_gz, work_dir):
+    """
+    zone .gz -> ns_gz (domain<TAB>provider<TAB>dnssec) and domains_gz
+    (bare domains), both sorted by domain, in one pass over the zone.
+
+    The whole "domain<TAB>..." line is sorted; TAB sorts below every
+    character a domain can contain, so the domains come out in exactly the
+    order `sort` gives the bare names (what comm/join and older snapshots
+    expect).
+    """
     size = zone_file.stat().st_size
     memory = SORT_MEMORY_LARGE if size >= LARGE_ZONE_BYTES else SORT_MEMORY_SMALL
 
-    with open(out_gz, "wb") as out:
+    with open(ns_gz, "wb") as out:
         run_pipeline(
             [
                 ["gzip", "-dc", str(zone_file)],
                 ["awk", "-v", f"suf=.{tld}.", AWK_EXTRACT],
                 ["sort", "-u", "-S", memory, "--parallel=2",
                  "-T", str(work_dir), "--compress-program=gzip"],
+                ["awk", "-v", f"dom=gzip -c -6 > '{domains_gz}'", AWK_AGGREGATE],
                 ["gzip", "-c", "-6"],
             ],
             out,
         )
 
 
-def diff_snapshots(current_gz, previous_gz, new_txt, deleted_txt):
-    """
-    Compare two sorted .gz snapshots with `comm`, streaming both.
-    previous_gz=None means first snapshot: count only, write no lists.
+def load_parking_providers():
+    """Provider labels (see AWK_EXTRACT) that only park domains, from providers.json."""
+    try:
+        with open(PROVIDERS_CONFIG, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return []
+    return sorted({p.strip().lower() for p in data.get("parking", []) if p.strip()})
 
-    Returns (total, new, deleted).
+
+PARKING = load_parking_providers()
+
+
+def diff_snapshots(current_ns, previous, previous_has_ns, out):
     """
-    p_cur = subprocess.Popen(["gzip", "-dc", str(current_gz)], stdout=subprocess.PIPE)
-    if previous_gz is not None:
-        p_prev = subprocess.Popen(["gzip", "-dc", str(previous_gz)], stdout=subprocess.PIPE)
+    Join the current ns snapshot with the previous one (an ns snapshot, or
+    a bare domains snapshot from before provider tracking, or None for the
+    first snapshot: count only, write no lists), streaming both.
+
+    `out` maps new/deleted/new_active/moved to the text files to write.
+    Returns (stats dict, providers dict, flows dict).
+    """
+    procs = []
+
+    def stream(cmd_list, stdin=None):
+        p = subprocess.Popen(cmd_list, stdin=stdin, stdout=subprocess.PIPE, env=C_ENV)
+        procs.append(p)
+        return p
+
+    p_cur = stream(["gzip", "-dc", str(current_ns)])
+    fds = [p_cur.stdout.fileno()]
+    if previous is not None:
+        p_prev = stream(["gzip", "-dc", str(previous)])
+        if not previous_has_ns:
+            p_raw = p_prev
+            p_prev = stream(["awk", '{ print $0 "\t?\t0" }'], stdin=p_raw.stdout)
+            p_raw.stdout.close()
         prev_arg = f"/dev/fd/{p_prev.stdout.fileno()}"
-        fds = (p_cur.stdout.fileno(), p_prev.stdout.fileno())
+        fds.append(p_prev.stdout.fileno())
     else:
         p_prev = None
         prev_arg = "/dev/null"
-        fds = (p_cur.stdout.fileno(),)
 
-    p_comm = subprocess.Popen(
-        ["comm", f"/dev/fd/{p_cur.stdout.fileno()}", prev_arg],
+    p_join = subprocess.Popen(
+        ["join", "-t", "\t", "-a1", "-a2", "-e", "-", "-o", "0,1.2,1.3,2.2,2.3",
+         f"/dev/fd/{p_cur.stdout.fileno()}", prev_arg],
         stdout=subprocess.PIPE,
         pass_fds=fds,
         env=C_ENV,
     )
+    procs.append(p_join)
     p_cur.stdout.close()
     if p_prev:
         p_prev.stdout.close()
@@ -199,24 +352,59 @@ def diff_snapshots(current_gz, previous_gz, new_txt, deleted_txt):
     p_awk = subprocess.Popen(
         [
             "awk",
-            "-v", f"write={0 if previous_gz is None else 1}",
-            "-v", f"new={new_txt}",
-            "-v", f"del={deleted_txt}",
+            "-v", f"write={0 if previous is None else 1}",
+            "-v", f"parking={','.join(PARKING)}",
+            "-v", f"new={out['new']}",
+            "-v", f"del={out['deleted']}",
+            "-v", f"act={out['new_active']}",
+            "-v", f"mv={out['moved']}",
             AWK_DIFF,
         ],
-        stdin=p_comm.stdout,
+        stdin=p_join.stdout,
         stdout=subprocess.PIPE,
         env=C_ENV,
     )
-    p_comm.stdout.close()
+    p_join.stdout.close()
 
-    output = p_awk.communicate()[0].decode()
-    codes = [p.wait() for p in (p_cur, p_prev, p_comm, p_awk) if p is not None]
+    output = p_awk.communicate()[0].decode("utf-8", "replace")
+    codes = [p.wait() for p in procs] + [p_awk.returncode]
     if any(codes):
-        raise RuntimeError(f"`gzip | comm | awk` diff failed with exit codes {codes}")
+        raise RuntimeError(f"`gzip | join | awk` diff failed with exit codes {codes}")
 
-    common, added, deleted = (int(x) for x in output.split())
-    return common + added, added, deleted
+    stats, providers, flows = {}, {}, {}
+    for line in output.splitlines():
+        parts = line.split("\t")
+        if parts[0] == "S":
+            keys = ("domains", "new", "deleted", "moved", "new_parked", "dnssec")
+            stats = dict(zip(keys, map(int, parts[1:])))
+        elif parts[0] == "P" and parts[1] not in ("", "-", "?"):
+            keys = ("domains", "new", "new_parked", "gained", "lost", "deleted", "dnssec")
+            providers[parts[1]] = dict(zip(keys, map(int, parts[2:])))
+        elif parts[0] == "F":
+            flows[parts[1]] = int(parts[2])
+
+    if previous is None:
+        stats.update(new=0, deleted=0, moved=0, new_parked=0)
+        for p in providers.values():
+            p.update(new=0, new_parked=0, gained=0, lost=0, deleted=0)
+    return stats, providers, flows
+
+
+def top_providers(providers, flows):
+    """Trim to what the site shows: biggest providers + anything notable today."""
+    keep = set(sorted(providers, key=lambda p: providers[p]["domains"], reverse=True)[:TOP_PROVIDERS])
+    for key in ("new", "gained", "lost"):
+        keep.update(sorted(providers, key=lambda p: providers[p][key], reverse=True)[:100])
+    kept = {p: providers[p] for p in keep if any(providers[p].values())}
+
+    other = {}
+    for p, v in providers.items():
+        if p not in kept:
+            for k, n in v.items():
+                other[k] = other.get(k, 0) + n
+
+    top_flows = dict(sorted(flows.items(), key=lambda kv: kv[1], reverse=True)[:TOP_FLOWS])
+    return kept, other, top_flows
 
 
 def gzip_file(src_path, dest_path):
@@ -263,77 +451,135 @@ def date_folders():
     return sorted(folders, key=lambda f: f.name, reverse=True)
 
 
-def find_previous_snapshot(tld, before=TODAY):
+def latest_snapshot(tld, kind="domains"):
+    """Newest lists/<date>/<kind>/<tld>.txt.gz, or None."""
     for folder in date_folders():
-        if folder.name >= before:
-            continue
-        path = folder / "domains" / f"{tld}.txt.gz"
+        path = folder / kind / f"{tld}.txt.gz"
         if path.exists():
             return path
     return None
 
 
-def done_today(tld):
-    return (
-        (JSON_FOLDER / tld / f"{TODAY}.json").exists()
-        and (LISTS_FOLDER / TODAY / "domains" / f"{tld}.txt.gz").exists()
-    )
+def zone_date(last_modified):
+    """Snapshot date for a zone published at `last_modified` (aware datetime)."""
+    return last_modified.astimezone(TIMEZONE).strftime("%Y-%m-%d")
+
+
+def snapshot_is_current(tld, last_modified):
+    """
+    True when our newest snapshot already is the CZDS version published at
+    `last_modified`: the snapshot file was written after it was published
+    (works for snapshots from before Last-Modified was recorded, too).
+    """
+    snapshot = latest_snapshot(tld)
+    if snapshot is None:
+        return False
+    written = datetime.fromtimestamp(snapshot.stat().st_mtime, timezone.utc)
+    return written >= last_modified
+
+
+def record_published(tld, last_modified):
+    """
+    Note the publication time on a snapshot made before it was recorded,
+    so recently_published() stops asking CZDS about it every hour.
+    """
+    latest = JSON_FOLDER / tld / "latest"
+    data = load_json(latest)
+    if not data or data.get("zone_published"):
+        return
+    data["zone_published"] = last_modified.isoformat(timespec="seconds")
+    write_json_atomic(latest.resolve(), data)
+
+
+def recently_published(tld):
+    """The newest snapshot is a zone published less than RECHECK_AFTER ago."""
+    data = load_json(JSON_FOLDER / tld / "latest") or {}
+    try:
+        published = datetime.fromisoformat(data["zone_published"])
+    except (KeyError, TypeError, ValueError):
+        return False
+    return datetime.now(timezone.utc) - published < RECHECK_AFTER
 
 
 # ==============================================================
 # Process one TLD
 # ==============================================================
 
-def process_tld(tld, zone_file):
-    start_time = time.time()
+LIST_KINDS = ("new", "deleted", "new_active", "moved")
 
-    today_folder = LISTS_FOLDER / TODAY
-    for kind in ("domains", "new", "deleted"):
-        (today_folder / kind).mkdir(parents=True, exist_ok=True)
+
+def process_tld(tld, zone_file, published):
+    """
+    Build the snapshot for the zone published at `published` (aware
+    datetime), dated by that. The previous snapshot is our newest one,
+    whatever its date: if it carries the same date (a second publication
+    the same day, or a snapshot from before dating by Last-Modified), it is
+    diffed against and then replaced.
+    """
+    start_time = time.time()
+    date = zone_date(published)
+
+    date_folder = LISTS_FOLDER / date
+    for kind in ("domains", "ns") + LIST_KINDS:
+        (date_folder / kind).mkdir(parents=True, exist_ok=True)
 
     work_dir = TMP_FOLDER / tld
     shutil.rmtree(work_dir, ignore_errors=True)
     work_dir.mkdir(parents=True)
 
     try:
-        sorted_gz = work_dir / "domains.txt.gz"
-        new_txt = work_dir / "new.txt"
-        deleted_txt = work_dir / "deleted.txt"
+        ns_gz = work_dir / "ns.txt.gz"
+        domains_gz = work_dir / "domains.txt.gz"
+        out = {kind: work_dir / f"{kind}.txt" for kind in LIST_KINDS}
         # awk only creates these on the first line it writes, a zone with nothing new or deleted would have none
-        new_txt.touch()
-        deleted_txt.touch()
+        for path in out.values():
+            path.touch()
 
-        extract_sorted_domains(zone_file, tld, sorted_gz, work_dir)
+        extract_snapshot(zone_file, tld, ns_gz, domains_gz, work_dir)
 
-        previous_file = find_previous_snapshot(tld)
-        if previous_file is None:
+        previous_domains = latest_snapshot(tld, "domains")
+        previous_ns = latest_snapshot(tld, "ns")
+        # the ns snapshot only counts if it belongs to the newest domains snapshot
+        has_ns = (
+            previous_ns is not None and previous_domains is not None
+            and previous_ns.parent.parent == previous_domains.parent.parent
+        )
+        previous = previous_ns if has_ns else previous_domains
+        if previous is None:
             log(f"{tld}: No previous snapshot found - skipping diff")
+        elif not has_ns:
+            log(f"{tld}: previous snapshot has no providers yet - moves start tomorrow")
 
-        total, added, deleted = diff_snapshots(sorted_gz, previous_file, new_txt, deleted_txt)
+        stats, providers, flows = diff_snapshots(ns_gz, previous, has_ns, out)
 
-        if previous_file is not None:
-            gzip_file(new_txt, today_folder / "new" / f"{tld}.txt.gz")
-            gzip_file(deleted_txt, today_folder / "deleted" / f"{tld}.txt.gz")
-        else:
-            added = deleted = 0
+        if previous is not None:
+            for kind in LIST_KINDS:
+                gzip_file(out[kind], date_folder / kind / f"{tld}.txt.gz")
 
-        # Domains file last: together with the JSON it marks the TLD done.
-        os.replace(sorted_gz, today_folder / "domains" / f"{tld}.txt.gz")
+        # Snapshots last: together with the JSON they mark the TLD done.
+        os.replace(ns_gz, date_folder / "ns" / f"{tld}.txt.gz")
+        os.replace(domains_gz, date_folder / "domains" / f"{tld}.txt.gz")
 
         result = {
             "tld": tld,
+            "date": date,
             "success": True,
-            "domains": total,
-            "new": added,
-            "deleted": deleted,
+            **stats,
+            "zone_published": published.isoformat(timespec="seconds"),
             "elapsed": time.time() - start_time,
         }
         write_tld_json(result, datetime.now(TIMEZONE).isoformat(timespec="seconds"))
+        write_providers_json(tld, date, providers, flows)
 
+        vs = ""
+        if previous is not None:
+            vs = f" (vs {previous.parent.parent.name})"
+            if previous.parent.parent.name == date:
+                vs = f" (replacing the earlier {date} snapshot)"
         log(
-            f"{tld}: {total:,} total, {added:,} new, {deleted:,} deleted, "
-            f"{result['elapsed']:.2f}s"
-            + (f" (vs {previous_file.parent.parent.name})" if previous_file else "")
+            f"{tld}: {stats['domains']:,} total, {stats['new']:,} new "
+            f"({stats['new_parked']:,} parked), {stats['deleted']:,} deleted, "
+            f"{stats['moved']:,} moved, {result['elapsed']:.2f}s{vs}"
         )
         return result
 
@@ -341,7 +587,7 @@ def process_tld(tld, zone_file):
         shutil.rmtree(work_dir, ignore_errors=True)
 
 
-def run_job(tld, token, local):
+def run_job(tld, token, local, published):
     """Download (unless local) + process + clean up one zone. Never raises."""
     zone_file = DOWNLOAD_FOLDER / f"{tld}.txt.gz"
 
@@ -353,7 +599,7 @@ def run_job(tld, token, local):
         elif not zone_file.exists():
             return {"tld": tld, "success": False, "reason": f"Zone file not found: {zone_file}"}
 
-        return process_tld(tld, zone_file)
+        return process_tld(tld, zone_file, published)
 
     except Exception as e:
         return {"tld": tld, "success": False, "reason": str(e)}
@@ -380,14 +626,18 @@ def write_json_atomic(path, data):
 def write_tld_json(result, updated_at):
     tld = result["tld"]
     tld_folder = JSON_FOLDER / tld
-    json_file = tld_folder / f"{TODAY}.json"
+    json_file = tld_folder / f"{result['date']}.json"
 
     write_json_atomic(json_file, {
         "tld": tld,
-        "date": TODAY,
+        "date": result["date"],
         "domains": result.get("domains", 0),
         "new": result.get("new", 0),
         "deleted": result.get("deleted", 0),
+        "new_parked": result.get("new_parked", 0),
+        "moved": result.get("moved", 0),
+        "dnssec": result.get("dnssec", 0),
+        "zone_published": result.get("zone_published"),
         "last_updated": updated_at,
         "timezone": TIMEZONE_NAME,
     })
@@ -404,6 +654,17 @@ def write_tld_json(result, updated_at):
         log(f"{tld}: Failed to update latest symlink: {e}")
 
 
+def write_providers_json(tld, date, providers, flows):
+    kept, other, top_flows = top_providers(providers, flows)
+    write_json_atomic(JSON_FOLDER / tld / "providers" / f"{date}.json", {
+        "tld": tld,
+        "date": date,
+        "providers": dict(sorted(kept.items(), key=lambda kv: kv[1]["domains"], reverse=True)),
+        "other": other,
+        "flows": top_flows,
+    })
+
+
 def load_json(path):
     try:
         with open(path, "r", encoding="utf-8") as f:
@@ -412,14 +673,15 @@ def load_json(path):
         return None
 
 
+SUMMED_KEYS = ("domains", "new", "deleted", "new_parked", "moved", "dnssec")
+
+
 def generate_summary_json(updated_at):
     """Totals over every TLD's latest stats."""
     summary = {
-        "date": TODAY,
+        "date": None,
         "tlds": 0,
-        "domains": 0,
-        "new": 0,
-        "deleted": 0,
+        **{key: 0 for key in SUMMED_KEYS},
         "last_updated": updated_at,
         "timezone": TIMEZONE_NAME,
     }
@@ -432,53 +694,56 @@ def generate_summary_json(updated_at):
         if not data:
             continue
         summary["tlds"] += 1
-        for key in ("domains", "new", "deleted"):
-            summary[key] += int(data.get(key, 0))
+        summary["date"] = max(summary["date"] or "", data.get("date") or "") or None
+        for key in SUMMED_KEYS:
+            summary[key] += int(data.get(key, 0) or 0)
 
     write_json_atomic(JSON_FOLDER / "summary.json", summary)
     log(f"Summary JSON updated -> {JSON_FOLDER / 'summary.json'}")
     return summary
 
 
-def write_combined_lists(summary, updated_at):
+def write_combined_lists(date, summary, updated_at):
     """
-    lists/TODAY/domains/all.txt.gz - latest snapshot of every TLD
-    lists/TODAY/new/all.txt.gz     - today's new domains, all TLDs
-    lists/TODAY/deleted/all.txt.gz - today's deleted domains, all TLDs
-    json/TODAY.json                - counts for the above
+    lists/<date>/domains/all.txt.gz - latest snapshot of every TLD
+    lists/<date>/<kind>/all.txt.gz  - <date>'s new/deleted/new_active/moved, all TLDs
+    json/<date>.json                - counts for the above
     """
-    today_folder = LISTS_FOLDER / TODAY
+    date_folder = LISTS_FOLDER / date
 
     latest_snapshots = {}
     for folder in reversed(date_folders()):  # oldest first, newer overwrite
+        if folder.name > date:
+            continue
         for f in (folder / "domains").glob("*.txt.gz"):
             if f.name != "all.txt.gz":
                 latest_snapshots[f.name] = f
 
-    counts = {"tlds": len(latest_snapshots), "domains": summary["domains"], "new": 0, "deleted": 0}
-
-    for tld_json in JSON_FOLDER.glob(f"*/{TODAY}.json"):
+    counts = {"tlds": len(latest_snapshots), "domains": summary["domains"]}
+    for key in SUMMED_KEYS[1:]:
+        counts[key] = 0
+    for tld_json in JSON_FOLDER.glob(f"*/{date}.json"):
         data = load_json(tld_json) or {}
-        counts["new"] += int(data.get("new", 0))
-        counts["deleted"] += int(data.get("deleted", 0))
+        for key in SUMMED_KEYS[1:]:
+            counts[key] += int(data.get(key, 0) or 0)
 
-    sources = {
-        "domains": [latest_snapshots[name] for name in sorted(latest_snapshots)],
-        "new": sorted(f for f in (today_folder / "new").glob("*.txt.gz") if f.name != "all.txt.gz"),
-        "deleted": sorted(f for f in (today_folder / "deleted").glob("*.txt.gz") if f.name != "all.txt.gz"),
-    }
+    sources = {"domains": [latest_snapshots[name] for name in sorted(latest_snapshots)]}
+    for kind in LIST_KINDS:
+        sources[kind] = sorted(
+            f for f in (date_folder / kind).glob("*.txt.gz") if f.name != "all.txt.gz"
+        )
 
     for kind, files in sources.items():
-        output_file = today_folder / kind / "all.txt.gz"
+        output_file = date_folder / kind / "all.txt.gz"
         try:
             output_file.parent.mkdir(parents=True, exist_ok=True)
             concat_gzip_files(files, output_file)
-            log(f"Combined {kind}: {counts[kind]:,} domains -> {output_file}")
+            log(f"Combined {kind} ({date}): {len(files):,} files -> {output_file}")
         except Exception as e:
-            log(f"Failed to combine {kind}: {e}")
+            log(f"Failed to combine {kind} ({date}): {e}")
 
-    write_json_atomic(JSON_FOLDER / f"{TODAY}.json", {
-        "date": TODAY,
+    write_json_atomic(JSON_FOLDER / f"{date}.json", {
+        "date": date,
         **counts,
         "last_updated": updated_at,
         "timezone": TIMEZONE_NAME,
@@ -494,23 +759,28 @@ def prune_old_data():
     folders = date_folders()
 
     # Full snapshots: keep only the newest per TLD (incl. all.txt.gz).
-    seen = set()
-    for folder in folders:
-        for f in sorted((folder / "domains").glob("*.txt.gz")):
-            if f.name in seen:
-                f.unlink(missing_ok=True)
-            else:
-                seen.add(f.name)
+    for kind in ("domains", "ns"):
+        seen = set()
+        for folder in folders:
+            for f in sorted((folder / kind).glob("*.txt.gz")):
+                if f.name in seen:
+                    f.unlink(missing_ok=True)
+                else:
+                    seen.add(f.name)
 
     # Everything else dated: keep KEEP_DAYS, except still-latest snapshots.
     for folder in folders:
         if folder.name >= cutoff:
             continue
         for child in folder.iterdir():
-            if child.name != "domains":
+            if child.name not in ("domains", "ns"):
                 shutil.rmtree(child, ignore_errors=True)
+        for kind in ("domains", "ns"):
+            try:
+                (folder / kind).rmdir()  # only succeeds if empty
+            except OSError:
+                pass
         try:
-            (folder / "domains").rmdir()  # only succeeds if empty
             folder.rmdir()
         except OSError:
             pass
@@ -518,7 +788,10 @@ def prune_old_data():
     for json_file in JSON_FOLDER.glob("**/????-??-??.json"):
         if json_file.stem >= cutoff:
             continue
-        latest = json_file.parent / "latest"
+        tld_folder = json_file.parent
+        if tld_folder.name == "providers":
+            tld_folder = tld_folder.parent
+        latest = tld_folder / "latest"
         if latest.is_symlink() and os.readlink(latest) == json_file.name:
             continue
         json_file.unlink(missing_ok=True)
@@ -576,6 +849,47 @@ def alert_failures(failed):
 # Main
 # ==============================================================
 
+def select_published_zones(tlds, token, local, check):
+    """
+    Map each zone that needs processing to its CZDS publication time.
+    check=False (explicit TLDs, --force) takes every zone as it is.
+    """
+    now = datetime.now(timezone.utc)
+    if local:
+        return {
+            t: datetime.fromtimestamp((DOWNLOAD_FOLDER / f"{t}.txt.gz").stat().st_mtime, timezone.utc)
+            for t in tlds
+        }
+
+    candidates = [t for t in tlds if not (check and recently_published(t))]
+    skipped = len(tlds) - len(candidates)
+
+    def head(tld):
+        try:
+            return tld, zone_last_modified(tld, token)
+        except Exception as e:
+            log(f"{tld}: Last-Modified check failed ({e}) - processing anyway")
+            return tld, None
+
+    published = {}
+    unchanged = 0
+    with ThreadPoolExecutor(max_workers=HEAD_WORKERS) as executor:
+        for tld, last_modified in executor.map(head, candidates):
+            last_modified = last_modified or now
+            if check and snapshot_is_current(tld, last_modified):
+                unchanged += 1
+                record_published(tld, last_modified)
+                continue
+            published[tld] = last_modified
+
+    if check:
+        log(
+            f"Zones published less than {RECHECK_AFTER} ago: {skipped}, "
+            f"checked: {len(candidates)}, not republished yet: {unchanged}, new: {len(published)}"
+        )
+    return published
+
+
 def disk_free():
     usage = shutil.disk_usage(REPO_ROOT)
     return f"{usage.free / 1e9:.1f}GB free"
@@ -626,26 +940,28 @@ def main():
 
     if requested:
         tlds = [t for t in tlds if t in requested]
-    elif not force:
-        tlds = [t for t in tlds if not done_today(t)]
+
+    published = select_published_zones(tlds, token, local, check=not (requested or force))
+    tlds = sorted(published)
 
     if not tlds:
-        log(f"Nothing to do - every zone is already processed for {TODAY}.")
+        log("Nothing to do - no zone has a newer version in CZDS yet.")
         return 2
 
     # Biggest first (by last snapshot size), so the multi-GB zones run
     # alongside the long tail of small ones instead of after it.
     def previous_size(tld):
-        prev = find_previous_snapshot(tld, before="9999")
+        prev = latest_snapshot(tld)
         return prev.stat().st_size if prev else 0
 
     tlds.sort(key=previous_size, reverse=True)
+    dates = sorted({zone_date(published[t]) for t in tlds})
 
-    log(f"Zones to process: {len(tlds)} ({WORKERS} at a time)")
+    log(f"Zones to process: {len(tlds)} ({WORKERS} at a time), snapshot dates: {', '.join(dates)}")
 
     results = []
     with ThreadPoolExecutor(max_workers=WORKERS) as executor:
-        futures = [executor.submit(run_job, tld, token, local) for tld in tlds]
+        futures = [executor.submit(run_job, tld, token, local, published[tld]) for tld in tlds]
         for future in as_completed(futures):
             result = future.result()
             results.append(result)
@@ -657,8 +973,8 @@ def main():
 
     updated_at = datetime.now(TIMEZONE).isoformat(timespec="seconds")
     summary = generate_summary_json(updated_at)
-    if succeeded:
-        write_combined_lists(summary, updated_at)
+    for date in sorted({r["date"] for r in succeeded}):
+        write_combined_lists(date, summary, updated_at)
     prune_old_data()
 
     log("")

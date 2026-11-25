@@ -43,6 +43,7 @@ x-data="{
     domains: [],
     search: '',
     kind: '{{ kind }}',
+    hideParked: false,
     page: 1,
     hasMore: false,
     truncated: false,
@@ -55,8 +56,12 @@ x-data="{
         this.load();
     },
 
+    fetchKind() {
+        return this.kind === 'new' && this.hideParked ? 'new_active' : this.kind;
+    },
+
     cacheKey() {
-        return this.kind + '|' + this.page + '|' + this.search;
+        return this.fetchKind() + '|' + this.page + '|' + this.search;
     },
 
     load() {
@@ -77,7 +82,7 @@ x-data="{
         this.loading = true;
 
         const params = new URLSearchParams({
-            kind: this.kind,
+            kind: this.fetchKind(),
             search: this.search,
             page: this.page,
         });
@@ -113,6 +118,11 @@ x-data="{
     },
 
     doSearch() {
+        this.page = 1;
+        this.load();
+    },
+
+    toggleParked() {
         this.page = 1;
         this.load();
     },
@@ -160,8 +170,19 @@ x-data="{
                 </span>
             </p>
 
+            {% if data.new_parked is defined %}
+            <p class="mt-2 text-sm text-gray-500" x-show="kind === 'new'"{% if kind != 'new' %} style="display: none"{% endif %}>
+                {{ "{:,}".format(data.new - data.new_parked) }} active, {{ "{:,}".format(data.new_parked) }} on parking / for-sale nameservers.
+            </p>
+            {% endif %}
+            <p class="mt-2 text-sm text-gray-500" x-show="kind === 'deleted'"{% if kind != 'deleted' %} style="display: none"{% endif %}>
+                Deleted means the domain left the zone file: it expired, was put on hold, or lost its nameservers.
+                Expired domains usually stay registered for about 30-35 more days (redemption and pending delete)
+                before they can be registered again, so most of these are not available yet.
+            </p>
+
             <p class="mt-3 text-sm text-gray-500">
-                Snapshot of {{ data.date }}, built from the official .{{ data.tld }} zone file (ICANN CZDS) and updated daily.
+                Snapshot of {{ data.date }}, built from the official .{{ data.tld }} zone file (ICANN CZDS) and updated daily{% if data.zone_published %}; this zone was published {{ data.zone_published }}{% endif %}.
             </p>
 
             <!-- Download Tabs (Hover updates domains list, Click triggers direct download) -->
@@ -240,6 +261,10 @@ x-data="{
                 </p>
 
                 <div class="flex gap-3 items-center">
+                    <label x-show="kind === 'new'"{% if kind != 'new' %} style="display: none"{% endif %} class="flex items-center gap-2 text-sm text-gray-600 select-none">
+                        <input type="checkbox" x-model="hideParked" @change="toggleParked()" class="rounded border-gray-300">
+                        Hide parked
+                    </label>
                     <input
                         x-model="search"
                         @keyup.enter="doSearch()"
@@ -299,6 +324,43 @@ x-data="{
                 </div>
             </div>
         </div>
+
+{% if providers %}
+        <div class="mt-8 rounded-xl border bg-white shadow-sm overflow-x-auto">
+            <div class="flex flex-wrap items-baseline justify-between gap-2 px-5 pt-5">
+                <h2 class="text-lg font-semibold text-gray-900">DNS providers of .{{ data.tld | to_unicode }} domains</h2>
+                <div class="text-sm text-gray-500">
+                    {% if data.dnssec is defined and data.domains %}DNSSEC: {{ "%.1f" | format(data.dnssec / data.domains * 100) }}% ·{% endif %}
+                    {% if data.moved is defined %}<a href="{{ url_for('moves', search='.' ~ data.tld) }}" class="text-sky-600 hover:text-sky-800">{{ "{:,}".format(data.moved) }} moved provider today</a> ·{% endif %}
+                    <a href="{{ url_for('providers_page') }}" class="text-sky-600 hover:text-sky-800">all providers →</a>
+                </div>
+            </div>
+            <table class="mt-3 w-full text-left text-sm border-collapse">
+                <thead class="bg-gray-50 text-xs uppercase text-gray-500">
+                    <tr>
+                        <th class="px-5 py-3">Provider</th>
+                        <th class="px-5 py-3 text-right">Domains</th>
+                        <th class="px-5 py-3 text-right">Share</th>
+                        <th class="px-5 py-3 text-right">New</th>
+                        <th class="px-5 py-3 text-right">Moved in</th>
+                        <th class="px-5 py-3 text-right">Moved out</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y">
+                    {% for label, p in providers %}
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-5 py-3"><a href="{{ url_for('provider_page', label=label) }}" class="font-medium text-sky-600 hover:text-sky-800">{{ label | provider_name }}</a>{% if label is parking %} <span class="ml-1 rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-500">parking</span>{% endif %}</td>
+                        <td class="px-5 py-3 text-right font-medium">{{ "{:,}".format(p.domains) }}</td>
+                        <td class="px-5 py-3 text-right text-gray-500">{{ "%.1f" | format(p.domains / data.domains * 100) if data.domains else "0.0" }}%</td>
+                        <td class="px-5 py-3 text-right text-emerald-600">+{{ "{:,}".format(p.new) }}</td>
+                        <td class="px-5 py-3 text-right text-emerald-600">+{{ "{:,}".format(p.gained) }}</td>
+                        <td class="px-5 py-3 text-right text-red-600">-{{ "{:,}".format(p.lost) }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+{% endif %}
 
 {% if info %}
         <div class="mt-8 rounded-xl border bg-white p-6 shadow-sm">
@@ -413,8 +475,9 @@ x-data="{
 {% endblock %}
 
 {% block countdown_script %}
-    const lastUpdated = new Date("{{ data.last_updated }}");
-    const nextUpdate = new Date(lastUpdated.getTime() + 12 * 60 * 60 * 1000);
+    // the registry publishes the zone once a day, we pick it up within the hour
+    const lastUpdated = new Date("{{ data.zone_published or data.last_updated }}");
+    const nextUpdate = new Date(lastUpdated.getTime() + {{ 25 if data.zone_published else 12 }} * 60 * 60 * 1000);
 
     function updateCountdown() {
         const now = new Date();

@@ -66,21 +66,9 @@ def strip_tld(domain):
     return ".".join(labels[:-1]) if len(labels) > 1 else domain
 
 
-def main():
-    keywords = load_keywords()
-
-    date = latest_date_with_new_domains()
-    if date is None:
-        print(
-            "Error: no lists/<date>/new/all.txt.gz found. Run process_zones.py first.",
-            file=sys.stderr,
-        )
-        return 1
-
-    source_file = LISTS_FOLDER / date / "new" / "all.txt.gz"
-    out_folder = LISTS_FOLDER / date / "keywords"
+def write_keyword_lists(keywords, source_file, out_folder):
+    """Filter source_file into out_folder/<keyword>.txt.gz, return the counts."""
     out_folder.mkdir(parents=True, exist_ok=True)
-
     matches = {kw: [] for kw in keywords}
 
     with gzip.open(source_file, "rt", encoding="utf-8", errors="replace") as f:
@@ -107,12 +95,41 @@ def main():
         os.replace(tmp, out_file)
 
         print(f"{kw}: {len(domains):,} matches -> {out_file}")
+    return counts
+
+
+def main():
+    keywords = load_keywords()
+
+    date = latest_date_with_new_domains()
+    if date is None:
+        print(
+            "Error: no lists/<date>/new/all.txt.gz found. Run process_zones.py first.",
+            file=sys.stderr,
+        )
+        return 1
+
+    counts = write_keyword_lists(
+        keywords,
+        LISTS_FOLDER / date / "new" / "all.txt.gz",
+        LISTS_FOLDER / date / "keywords",
+    )
+
+    # Same lists without parked domains (new_active/ from process_zones.py),
+    # for the "hide parked" switch on /trending.
+    active_source = LISTS_FOLDER / date / "new_active" / "all.txt.gz"
+    active_counts = None
+    if active_source.exists():
+        active_counts = write_keyword_lists(
+            keywords, active_source, LISTS_FOLDER / date / "keywords_active"
+        )
 
     updated_at = datetime.now(TIMEZONE).isoformat(timespec="seconds")
 
     summary = {
         "date": date,
         "keywords": counts,
+        "active": active_counts,
         "last_updated": updated_at,
         "timezone": TIMEZONE_NAME,
     }

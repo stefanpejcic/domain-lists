@@ -281,11 +281,17 @@ def main():
 
     start_time = time.time()
 
-    date_folder = LISTS_FOLDER / TODAY
-    domains_folder = date_folder / "domains"
+    # Zones are processed as CZDS publishes them, so each TLD's newest
+    # snapshot can sit in a different date folder (process_zones.py keeps
+    # only the newest one per TLD).
+    newest = {}
+    for folder in sorted(LISTS_FOLDER.glob("????-??-??")):
+        for f in (folder / "domains").glob("*.txt.gz"):
+            if f.name != "all.txt.gz":
+                newest[f.name] = f
 
-    if not domains_folder.exists():
-        log(f"ERROR: Domains folder not found: {domains_folder}")
+    if not newest:
+        log(f"ERROR: No domain snapshots found in {LISTS_FOLDER}")
         return 1
 
     JSON_FOLDER.mkdir(parents=True, exist_ok=True)
@@ -293,14 +299,11 @@ def main():
     log("==============================================")
     log("Generating Domain Pattern Counters")
     log(f"Date: {TODAY}")
-    log(f"Source: {domains_folder}")
+    log(f"Source: newest snapshot per TLD in {LISTS_FOLDER}")
     log(f"Output: {OUTPUT_FILE}")
     log("==============================================")
 
-    domain_files = sorted(
-        f for f in domains_folder.glob("*.txt.gz")
-        if f.name != "all.txt.gz"
-    )
+    domain_files = [newest[name] for name in sorted(newest)]
 
     if not domain_files:
         log("ERROR: No .txt.gz domain files found.")

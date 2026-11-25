@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+
+{% block title %}DNS provider market share, gains and losses ({{ data.date }}) | zonelists.com{% endblock %}
+
+{% block description %}Which DNS and hosting providers run the {{ "{:,}".format(totals.domains or 0) }} domains in {{ "{:,}".format(totals.tlds or 0) }} TLDs, who gained and lost domains today, and where newly registered domains go. Built daily from ICANN CZDS zone files.{% endblock %}
+
+{% block header_left %}
+<span class="crumb">DNS providers</span>
+{% endblock %}
+
+{% block header_right %}
+Last update: <span class="font-medium text-gray-900">{{ data.last_updated }}</span>
+{% endblock %}
+
+{% macro provider_link(label, known) -%}
+{% if label in known %}<a href="{{ url_for('provider_page', label=label) }}" class="font-medium text-sky-600 hover:text-sky-800">{{ label | provider_name }}</a>{% else %}<span class="font-medium text-gray-700">{{ label | provider_name }}</span>{% endif %}
+{%- endmacro %}
+
+{% macro pct(part, whole) -%}
+{{ "%.1f" | format(part / whole * 100) if whole else "0.0" }}%
+{%- endmacro %}
+
+{% block content %}
+
+        <div class="max-w-3xl mx-auto text-center mb-10">
+            <h1 class="mx-auto text-3xl font-bold text-gray-900 sm:text-4xl sm:leading-none sm:tracking-tight">
+                DNS providers
+            </h1>
+            <p class="mt-2 text-xl text-gray-600">
+                Who runs the nameservers of <span class="font-bold">{{ "{:,}".format(totals.domains or 0) }}</span> domains in {{ "{:,}".format(totals.tlds or 0) }} TLDs.
+            </p>
+            <p class="mt-3 text-sm text-gray-500">
+                Every domain's nameservers come from its zone file (ns1.cloudflare.com is Cloudflare,
+                ns1.domaincontrol.com is GoDaddy). Comparing them with the previous day's snapshot shows
+                which domains <a href="{{ url_for('moves') }}" class="text-sky-600 hover:text-sky-800">moved to another provider</a>.
+                The nameservers show where a domain's DNS is hosted, which is usually, but not always, its registrar or web host.
+            </p>
+        </div>
+
+        <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-10">
+            <div class="rounded-xl border bg-white p-5 shadow-sm">
+                <div class="text-xs font-medium uppercase text-gray-400">Moved provider today</div>
+                <div class="mt-1 text-2xl font-bold text-gray-900">{{ "{:,}".format(totals.moved or 0) }}</div>
+                <a href="{{ url_for('moves') }}" class="text-sm text-sky-600 hover:text-sky-800">Browse moves →</a>
+            </div>
+            <div class="rounded-xl border bg-white p-5 shadow-sm">
+                <div class="text-xs font-medium uppercase text-gray-400">New domains today</div>
+                <div class="mt-1 text-2xl font-bold text-emerald-600">+{{ "{:,}".format(totals.new or 0) }}</div>
+                <div class="text-sm text-gray-500">{{ pct(totals.new_parked or 0, totals.new or 0) }} on parking nameservers</div>
+            </div>
+            <div class="rounded-xl border bg-white p-5 shadow-sm">
+                <div class="text-xs font-medium uppercase text-gray-400">DNSSEC signed</div>
+                <div class="mt-1 text-2xl font-bold text-gray-900">{{ pct(totals.dnssec or 0, totals.domains or 0) }}</div>
+                <div class="text-sm text-gray-500">{{ "{:,}".format(totals.dnssec or 0) }} domains with a DS record</div>
+            </div>
+            <div class="rounded-xl border bg-white p-5 shadow-sm">
+                <div class="text-xs font-medium uppercase text-gray-400">Data</div>
+                <div class="mt-1 text-sm text-gray-700">Snapshot of {{ data.date }}</div>
+                <a href="{{ url_for('api_providers') }}" class="text-sm text-sky-600 hover:text-sky-800">JSON API →</a>
+            </div>
+        </div>
+
+        <div class="grid gap-6 lg:grid-cols-3 mb-10">
+            {% for title, rows, value in [
+                ("Biggest net gain today", winners, "net"),
+                ("Biggest net loss today", losers, "net"),
+                ("Most new registrations today", new_leaders, "new"),
+            ] %}
+            <div class="rounded-xl border bg-white p-5 shadow-sm">
+                <h2 class="text-sm font-semibold text-gray-900">{{ title }}</h2>
+                <ol class="mt-3 space-y-2 text-sm">
+                    {% for label, p in rows %}
+                    {% set n = p.gained - p.lost if value == "net" else p.new %}
+                    <li class="flex justify-between gap-3">
+                        <span class="truncate">{{ provider_link(label, data.providers) }}</span>
+                        <span class="font-medium {{ 'text-emerald-600' if n > 0 else 'text-red-600' }}">{{ "{:+,}".format(n) }}</span>
+                    </li>
+                    {% else %}
+                    <li class="text-gray-400">No data yet.</li>
+                    {% endfor %}
+                </ol>
+            </div>
+            {% endfor %}
+        </div>
+
+        <div class="rounded-xl border bg-white shadow-sm mb-10 overflow-x-auto">
+            <h2 class="px-5 pt-5 text-lg font-semibold text-gray-900">Top 100 providers by domains</h2>
+            <table class="mt-3 w-full text-left text-sm border-collapse">
+                <thead class="bg-gray-50 text-xs uppercase text-gray-500">
+                    <tr>
+                        <th class="px-5 py-3">#</th>
+                        <th class="px-5 py-3">Provider</th>
+                        <th class="px-5 py-3 text-right">Domains</th>
+                        <th class="px-5 py-3 text-right">Share</th>
+                        <th class="px-5 py-3 text-right">New</th>
+                        <th class="px-5 py-3 text-right">Moved in</th>
+                        <th class="px-5 py-3 text-right">Moved out</th>
+                        <th class="px-5 py-3 text-right">DNSSEC</th>
+                        <th class="px-5 py-3 text-right">TLDs</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y">
+                    {% for label, p in providers %}
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-5 py-3 text-gray-400">{{ loop.index }}</td>
+                        <td class="px-5 py-3">{{ provider_link(label, data.providers) }}{% if label is parking %} <span class="ml-1 rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-500">parking</span>{% endif %}</td>
+                        <td class="px-5 py-3 text-right font-medium">{{ "{:,}".format(p.domains) }}</td>
+                        <td class="px-5 py-3 text-right text-gray-500">{{ pct(p.domains, totals.domains) }}</td>
+                        <td class="px-5 py-3 text-right text-emerald-600">+{{ "{:,}".format(p.new) }}</td>
+                        <td class="px-5 py-3 text-right text-emerald-600">+{{ "{:,}".format(p.gained) }}</td>
+                        <td class="px-5 py-3 text-right text-red-600">-{{ "{:,}".format(p.lost) }}</td>
+                        <td class="px-5 py-3 text-right text-gray-500">{{ pct(p.dnssec, p.domains) }}</td>
+                        <td class="px-5 py-3 text-right text-gray-500">{{ "{:,}".format(p.tlds) }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="rounded-xl border bg-white shadow-sm overflow-x-auto">
+            <h2 class="px-5 pt-5 text-lg font-semibold text-gray-900">Biggest moves between providers today</h2>
+            <table class="mt-3 w-full text-left text-sm border-collapse">
+                <thead class="bg-gray-50 text-xs uppercase text-gray-500">
+                    <tr>
+                        <th class="px-5 py-3">From</th>
+                        <th class="px-5 py-3">To</th>
+                        <th class="px-5 py-3 text-right">Domains</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y">
+                    {% for f in flows %}
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-5 py-3">{{ provider_link(f.from, data.providers) }}</td>
+                        <td class="px-5 py-3">{{ provider_link(f.to, data.providers) }}</td>
+                        <td class="px-5 py-3 text-right font-medium">{{ "{:,}".format(f.count) }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="3" class="px-5 py-6 text-center text-gray-400">No moves recorded yet.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <p class="mt-6 text-xs text-gray-400">
+            "Parking" marks nameservers that only show a parked or for-sale page. "Self-hosted" means the domain is its own
+            nameserver (ns1.example.com for example.com). New domains are those that appeared in today's zone file; a
+            domain registered without nameservers isn't in the zone and isn't counted.
+        </p>
+
+{% endblock %}

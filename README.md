@@ -7,12 +7,14 @@ domain-lists/
 ├── .gitignore
 ├── README.md
 ├── install.sh
-├── cron.sh            # the cron job (runs inside the container every 6h)
+├── cron.sh            # the cron job (runs inside the container every hour)
 ├── keywords.json      # tracked keywords for /trending (edit, no code change needed)
+├── providers.json     # DNS provider display names + parking providers (edit, no code change needed)
 ├── tailwind.config.js
 ├── scripts/
 │   ├── download_zones.py          # CZDS auth + download helpers (also usable standalone)
-│   ├── process_zones.py           # download -> parse -> diff each zone, write lists/json
+│   ├── process_zones.py           # download -> parse -> diff each zone (domains + DNS providers), write lists/json
+│   ├── generate_providers.py      # combines per-TLD provider stats into json/providers.json
 │   ├── generate_distribution.py
 │   ├── extract_short_domains.py
 │   ├── tld_scrapper.py
@@ -50,6 +52,40 @@ meant for scripts: no token dance, just a 60 requests/minute per-IP limit.
 - `GET /api/v1/tld/<tld>` — stats for one TLD
 - `GET /api/v1/tld/<tld>/<kind>` — direct `.txt.gz` download (`kind` is
   `domains`, `new`, or `deleted`; `tld=all` combines every TLD)
+
+### When zones are processed
+
+Registries publish their zones in CZDS once a day, anywhere from 00:00 to
+~10:00 UTC (.com around 06:00, .xyz sometimes after 09:00), and the time
+drifts. `cron.sh` therefore runs every hour, and `process_zones.py` asks
+CZDS (HEAD, `Last-Modified`) whether a zone has a newer version than our
+snapshot; only those are downloaded. Each snapshot is dated by the zone's
+`Last-Modified` (Europe/Belgrade), so a date's lists always compare two
+consecutive publications. Zones published less than 20 hours ago aren't
+asked about at all.
+
+### DNS providers, moves and parked domains
+
+Besides the domain names, `process_zones.py` keeps each domain's NS and DS
+records, reduced to a provider label (`ns1.cloudflare.com` -> `cloudflare`,
+`ns-1.awsdns-12.co.uk` -> `awsdns`, the domain's own nameservers ->
+`(self)`) and a DNSSEC flag, in `lists/<date>/ns/<tld>.txt.gz`. Joining it
+with the previous snapshot gives, per TLD and date:
+
+- `new_active/` - new domains minus those on parking/for-sale nameservers
+- `moved/` - `domain<TAB>old provider<TAB>new provider`
+- `json/<tld>/providers/<date>.json` - domains, new, parked, gained, lost,
+  deleted and DNSSEC counts per provider, plus the biggest provider-to-provider flows
+
+`scripts/generate_providers.py` combines these into `json/providers.json`
+for `/providers`, `/providers/<label>`, `/moves` and `/api/v1/providers`.
+`providers.json` at the repo root holds display names and the list of
+parking providers; edit it, no code change needed.
+
+Zone files only list domains with nameservers. "Deleted" therefore means
+the domain left the zone (expired, on hold, or nameservers removed), not
+that it can be registered: expired domains usually stay registered for
+another 30-35 days.
 
 ### Trending keyword lists
 

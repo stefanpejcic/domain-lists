@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+
+{% block title %}Domains that moved to another DNS provider today | zonelists.com{% endblock %}
+
+{% block header_left %}
+<span class="crumb">Provider moves</span>
+{% endblock %}
+
+{% block header_right %}
+Last update: <span class="font-medium text-gray-900">{{ summary.last_updated }}</span>
+{% endblock %}
+
+{% block description %}{{ "{:,}".format(summary.moved or 0) }} domains changed their DNS provider in the latest zone files, e.g. from GoDaddy to Cloudflare. Browse, search by domain or provider, or download the full list.{% endblock %}
+
+{% block main %}
+    <main
+        class="md:pt-10 px-4 mx-auto max-w-7xl md:px-6 lg:px-8 pb-8"
+        x-data="{
+            moves: [],
+            search: {{ search | tojson | forceescape }},
+            page: 1,
+            hasMore: false,
+            truncated: false,
+            loading: false,
+            cache: {},
+
+            init() { this.load(); },
+
+            load() {
+                const key = this.page + '|' + this.search;
+                if (this.cache[key]) {
+                    Object.assign(this, this.cache[key]);
+                    this.loading = false;
+                    return;
+                }
+                this.loading = true;
+                const params = new URLSearchParams({ search: this.search, page: this.page });
+                fetch('/moves/browse?' + params.toString())
+                    .then(r => r.json())
+                    .then(data => {
+                        const result = { moves: data.moves || [], hasMore: data.has_more, truncated: data.truncated || false };
+                        Object.assign(this, result);
+                        this.cache[key] = result;
+                        this.loading = false;
+                    })
+                    .catch(() => { this.loading = false; });
+            },
+
+            doSearch() { this.page = 1; this.load(); },
+            nextPage() { if (this.hasMore) { this.page += 1; this.load(); } },
+            prevPage() { if (this.page > 1) { this.page -= 1; this.load(); } }
+        }"
+    >
+        {{ self.content() }}
+    </main>
+{% endblock %}
+
+{% block content %}
+
+        <div class="max-w-3xl mx-auto text-center mb-10">
+            <h1 class="mx-auto text-3xl font-bold text-gray-900 sm:text-4xl sm:leading-none sm:tracking-tight">
+                Domains that moved to another DNS provider
+            </h1>
+            <p class="mt-2 text-xl text-gray-600">
+                <span class="font-bold">{{ "{:,}".format(summary.moved or 0) }}</span> domains changed nameserver provider in the latest zone files.
+            </p>
+            <p class="mt-3 text-sm text-gray-500">
+                A domain whose nameservers switch from one provider to another (GoDaddy to Cloudflare, a parking page
+                to a web host) usually just changed host or registrar, or went live. Search by domain or by provider
+                label (e.g. <code class="font-mono">cloudflare</code>, <code class="font-mono">domaincontrol</code>).
+                See the <a href="{{ url_for('providers_page') }}" class="text-sky-600 hover:text-sky-800">provider totals</a>.
+            </p>
+
+            <div class="mt-6">
+                <a
+                    href="#download"
+                    @click.prevent="$store.download.open({type: 'tld', tld: 'all', kind: 'moved'}, 'Download all provider moves')"
+                    @mouseenter="$store.download.preview({type: 'tld', tld: 'all', kind: 'moved'}, 'Download all provider moves')"
+                    class="inline-flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700"
+                >
+                    Download all moves {% if sizes.moved %}<span class="ml-1 text-xs text-gray-300">({{ sizes.moved | filesizeformat }})</span>{% endif %}
+                </a>
+                <p class="mt-2 text-xs text-gray-400">Tab-separated: domain, old provider, new provider.</p>
+            </div>
+        </div>
+
+        {% include "_download_section.html" %}
+
+        <div class="relative p-6 border border-gray-200 rounded-lg shadow-sm bg-gray-50/50">
+            <div class="flex gap-2 justify-between mb-4 items-center flex-wrap">
+                <p class="leading-relaxed text-gray-700">
+                    <span x-show="!loading" x-text="'Showing up to ' + moves.length + ' moves (page ' + page + ')'"></span>
+                    <span x-show="loading">Loading...</span>
+                </p>
+                <div class="flex gap-3 items-center">
+                    <input
+                        x-model="search"
+                        @keyup.enter="doSearch()"
+                        type="search"
+                        placeholder="Domain or provider..."
+                        class="w-56 rounded-lg border px-3 py-2 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
+                    >
+                    <button @click="doSearch()" class="rounded-lg bg-gray-100 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200">Search</button>
+                </div>
+            </div>
+
+            <p x-show="!loading && truncated" x-cloak class="mb-3 text-sm text-gray-500">
+                The list is too large to search completely, so the search stopped after a few seconds and the results may be incomplete.
+            </p>
+
+            <template x-if="!loading && moves.length === 0">
+                <p class="text-sm text-gray-400">No moves found.</p>
+            </template>
+
+            <div class="overflow-x-auto" x-show="!loading && moves.length > 0">
+                <table class="w-full text-left text-sm border-collapse">
+                    <thead class="bg-gray-50 text-xs uppercase text-gray-500">
+                        <tr>
+                            <th class="px-4 py-2">Domain</th>
+                            <th class="px-4 py-2">From</th>
+                            <th class="px-4 py-2">To</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y bg-white">
+                        <template x-for="m in moves" :key="m.domain">
+                            <tr>
+                                <td class="px-4 py-2 font-mono text-gray-800" x-text="toUnicode(m.domain)"></td>
+                                <td class="px-4 py-2 text-red-600" x-text="m.from_name" :title="m.from"></td>
+                                <td class="px-4 py-2 text-emerald-600" x-text="m.to_name" :title="m.to"></td>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="flex items-center justify-between mt-6 pt-4 border-t text-sm text-gray-500">
+                <div x-text="'Page ' + page"></div>
+                <div class="flex gap-2">
+                    <button @click="prevPage()" :disabled="page <= 1" :class="page <= 1 ? 'opacity-40 cursor-not-allowed' : 'hover:bg-gray-100'" class="rounded-lg border px-3 py-1.5 font-medium bg-white">← Prev</button>
+                    <button @click="nextPage()" :disabled="!hasMore" :class="!hasMore ? 'opacity-40 cursor-not-allowed' : 'hover:bg-gray-100'" class="rounded-lg border px-3 py-1.5 font-medium bg-white">Next →</button>
+                </div>
+            </div>
+        </div>
+
+{% endblock %}

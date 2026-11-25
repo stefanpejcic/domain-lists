@@ -15,6 +15,7 @@ import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import quote
 from xml.sax.saxutils import escape
 
 from dotenv import load_dotenv
@@ -70,6 +71,13 @@ def main():
     add("/dropped", None, "daily", "0.8")
     add("/patterns", None, "daily", "0.6")
     add("/deleted", None, "daily", "0.5")
+    add("/providers", None, "daily", "0.7")
+    add("/moves", None, "daily", "0.6")
+
+    # the biggest provider pages (json/providers.json from generate_providers.py)
+    providers = (load_json(JSON_FOLDER / "providers.json") or {}).get("providers", {})
+    for label in list(providers)[:100]:
+        add(f"/providers/{quote(label)}", None, "daily", "0.4")
 
     for pattern in DELETED_PATTERNS:
         add(f"/deleted/{pattern}", None, "daily", "0.4")

@@ -199,6 +199,7 @@
             x-data="{
                 domains: [],
                 search: '',
+                hideParked: false,
                 page: 1,
                 hasMore: false,
                 loading: false,
@@ -212,7 +213,8 @@
 
                     const params = new URLSearchParams({
                         search: this.search,
-                        page: this.page
+                        page: this.page,
+                        active: this.hideParked ? '1' : '0'
                     });
 
                     fetch(
@@ -273,6 +275,15 @@
                         {{ "{:,}".format(count) }} matches today
 
                     </span>
+                    {% if active_count is not none %}
+                    <span class="rounded-full bg-gray-100 px-3 py-1 text-sm font-medium text-gray-600">
+                        {{ "{:,}".format(active_count) }} not parked
+                    </span>
+                    <label class="flex items-center gap-2 text-sm text-gray-600 select-none">
+                        <input type="checkbox" x-model="hideParked" @change="doSearch()" class="rounded border-gray-300">
+                        Hide parked
+                    </label>
+                    {% endif %}
 
                 </div>
 

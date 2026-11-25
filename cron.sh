@@ -1,20 +1,24 @@
 #!/bin/bash
-# Runs inside the "domains" container (ofelia job, every 6h, no-overlap).
-# The first run of a day does the work; later runs only retry zones that
-# failed and otherwise exit right away. Failure alerts are emailed by
-# process_zones.py itself.
+# Runs inside the "domains" container (ofelia job, every hour, no-overlap).
+# Registries publish their zones in CZDS at different times (00:00 to
+# ~10:00 UTC), so each run processes only the zones published since the
+# last one (and retries failures); runs where nothing new was published
+# exit right away. Failure alerts are emailed by process_zones.py itself.
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PY="python3 -B"
 # venv from install.sh (non-container installs)
 [ -x "$REPO_DIR/venv/bin/python" ] && PY="$REPO_DIR/venv/bin/python -B"
 
-# download + process every zone not yet done today
+# download + process every zone CZDS has published a newer version of
 $PY "$REPO_DIR/scripts/process_zones.py"
 if [ $? -eq 2 ]; then
     echo "Nothing new to process."
     exit 0
 fi
+
+# combine per-TLD DNS provider stats (/providers)
+$PY "$REPO_DIR/scripts/generate_providers.py"
 
 # generate trending keyword lists (needs today's new/all.txt.gz from process_zones.py)
 $PY "$REPO_DIR/scripts/generate_keyword_lists.py"

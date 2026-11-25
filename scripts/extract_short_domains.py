@@ -124,12 +124,20 @@ def extract_pattern(target_date: str, pattern_key: str, matcher_func) -> int:
     return count
 
 
+def latest_deleted_date():
+    """Newest date with a combined deleted list (zones are dated by their CZDS publication)."""
+    dates = sorted(
+        f.parent.parent.name for f in LISTS_FOLDER.glob("????-??-??/deleted/all.txt.gz")
+    )
+    return dates[-1] if dates else TODAY
+
+
 def main():
     start_time = time.time()
     
     # Arg parsing: $1 can be pattern or date if pattern isn't provided
     raw_arg1 = sys.argv[1].lower().strip() if len(sys.argv) > 1 else "all"
-    target_date = sys.argv[2].strip() if len(sys.argv) > 2 else TODAY
+    target_date = sys.argv[2].strip() if len(sys.argv) > 2 else latest_deleted_date()
 
     # Determine patterns to run
     if raw_arg1 in PATTERN_MATCHERS:
