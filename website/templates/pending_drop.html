@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+
+{% block title %}Pending delete domains: {{ "{:,}".format(count) }} expected to drop on {{ date }} | zonelists.com{% endblock %}
+
+{% block description %}{{ "{:,}".format(count) }} domains are expected to drop and become available to register on {{ date }}: they left the zone file about {{ data.drop_after_days }} days ago (expired, then redemption and pending delete) and never came back. Free daily pending delete list for every gTLD.{% endblock %}
+
+{% block header_left %}
+<span class="crumb">Pending drop</span>
+{% endblock %}
+
+{% block header_right %}
+Last update: <span class="font-medium text-gray-900">{{ data.last_updated }}</span>
+{% endblock %}
+
+{% block main %}
+    <main
+        class="md:pt-10 px-4 mx-auto max-w-7xl md:px-6 lg:px-8 pb-8"
+        x-data="{
+            domains: [],
+            search: '',
+            page: 1,
+            hasMore: false,
+            truncated: false,
+            loading: false,
+            cache: {},
+
+            init() { this.load(); },
+
+            load() {
+                const key = this.page + '|' + this.search;
+                if (this.cache[key]) {
+                    Object.assign(this, this.cache[key]);
+                    this.loading = false;
+                    return;
+                }
+                this.loading = true;
+                const params = new URLSearchParams({ search: this.search, page: this.page });
+                fetch('/pending-drop/{{ date }}/browse?' + params.toString())
+                    .then(r => r.json())
+                    .then(data => {
+                        const result = { domains: data.domains || [], hasMore: data.has_more, truncated: data.truncated || false };
+                        Object.assign(this, result);
+                        this.cache[key] = result;
+                        this.loading = false;
+                    })
+                    .catch(() => { this.loading = false; });
+            },
+
+            doSearch() { this.page = 1; this.load(); },
+            nextPage() { if (this.hasMore) { this.page += 1; this.load(); } },
+            prevPage() { if (this.page > 1) { this.page -= 1; this.load(); } }
+        }"
+    >
+        {{ self.content() }}
+    </main>
+{% endblock %}
+
+{% block content %}
+
+        <div class="max-w-3xl mx-auto text-center mb-8">
+            <h1 class="mx-auto text-3xl font-bold text-gray-900 sm:text-4xl sm:leading-none sm:tracking-tight">
+                Domains expected to drop {{ "today" if date == today else ("on " ~ date) }}
+            </h1>
+            <p class="mt-2 text-xl text-gray-600">
+                <span class="font-bold text-emerald-600">{{ "{:,}".format(count) }}</span> domains should become available to register{{ "" if date == today else " on " ~ date }}.
+            </p>
+            <p class="mt-3 text-sm text-gray-500">
+                When a gTLD domain expires and isn't renewed, it leaves the zone file and goes through about
+                30 days of redemption and 5 days of pending delete before anyone can register it. These domains
+                left the zone {{ data.drop_after_days }} days before this date and haven't come back since.
+                The date is an estimate: a registrar can delete a domain a few days earlier or later, and a
+                domain that left the zone for another reason (a hold, removed nameservers) may not drop at all.
+                Check availability before you rely on it.
+            </p>
+        </div>
+
+        <div class="mb-8 flex flex-wrap justify-center gap-2">
+            {% for d, n in dates.items() %}
+            <a href="{{ url_for('pending_drop', date=d) }}"
+               class="rounded-lg border px-3 py-2 text-sm {{ 'bg-gray-900 text-white border-gray-900' if d == date else 'bg-white text-gray-700 hover:bg-gray-50' }}">
+                <span class="font-medium">{{ "Today" if d == today else d[5:] }}</span>
+                <span class="ml-1 {{ 'text-gray-300' if d == date else 'text-gray-400' }}">{{ "{:,}".format(n) }}</span>
+            </a>
+            {% endfor %}
+        </div>
+
+        <div class="mb-8 text-center">
+            <a
+                href="#download"
+                @click.prevent="$store.download.open({type: 'pending', date: '{{ date }}'}, 'Download domains expected to drop on {{ date }}')"
+                @mouseenter="$store.download.preview({type: 'pending', date: '{{ date }}'}, 'Download domains expected to drop on {{ date }}')"
+                class="inline-flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700"
+            >
+                Download the {{ date }} list {% if file_size %}<span class="ml-1 text-xs text-gray-300">({{ file_size | filesizeformat }})</span>{% endif %}
+            </a>
+            {% if top_tlds %}
+            <p class="mt-3 text-sm text-gray-500">
+                {% for tld, n in top_tlds.items() %}{% if not loop.first %} · {% endif %}.{{ tld | to_unicode }} {{ "{:,}".format(n) }}{% endfor %}
+            </p>
+            {% endif %}
+        </div>
+
+        {% include "_download_section.html" %}
+
+        <div class="relative p-6 border border-gray-200 rounded-lg shadow-sm bg-gray-50/50">
+            <div class="flex gap-2 justify-between mb-4 items-center flex-wrap">
+                <p class="leading-relaxed text-gray-700">
+                    <span x-show="!loading" x-text="'Showing up to ' + domains.length + ' domains (page ' + page + ')'"></span>
+                    <span x-show="loading">Loading...</span>
+                </p>
+                <div class="flex gap-3 items-center">
+                    <input
+                        x-model="search"
+                        @keyup.enter="doSearch()"
+                        type="search"
+                        placeholder="Search domain..."
+                        class="w-48 rounded-lg border px-3 py-2 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
+                    >
+                    <button @click="doSearch()" class="rounded-lg bg-gray-100 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200">Search</button>
+                </div>
+            </div>
+
+            <p x-show="!loading && truncated" x-cloak class="mb-3 text-sm text-gray-500">
+                The list is too large to search completely, so the search stopped after a few seconds and the results may be incomplete.
+            </p>
+
+            <template x-if="!loading && domains.length === 0">
+                <p class="text-sm text-gray-400">No domains found.</p>
+            </template>
+
+            <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4" x-show="!loading && domains.length > 0">
+                <template x-for="domain in domains" :key="domain">
+                    <div class="block p-3 bg-white border border-gray-200 rounded font-mono text-sm text-gray-800 truncate"
+                         x-text="toUnicode(domain)" :title="toUnicode(domain)"></div>
+                </template>
+            </div>
+
+            <div class="flex items-center justify-between mt-6 pt-4 border-t text-sm text-gray-500">
+                <div x-text="'Page ' + page"></div>
+                <div class="flex gap-2">
+                    <button @click="prevPage()" :disabled="page <= 1" :class="page <= 1 ? 'opacity-40 cursor-not-allowed' : 'hover:bg-gray-100'" class="rounded-lg border px-3 py-1.5 font-medium bg-white">← Prev</button>
+                    <button @click="nextPage()" :disabled="!hasMore" :class="!hasMore ? 'opacity-40 cursor-not-allowed' : 'hover:bg-gray-100'" class="rounded-lg border px-3 py-1.5 font-medium bg-white">Next →</button>
+                </div>
+            </div>
+        </div>
+
+{% endblock %}

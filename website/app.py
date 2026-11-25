@@ -32,7 +32,10 @@ DOMAINS_PER_PAGE = 100
 # a search or deep page on a huge list (.com is 168M domains) stops after this, so it can't tie up a server thread
 SEARCH_TIME_LIMIT = 3  # seconds
 # new_active = new minus domains on parking nameservers; moved = domain<TAB>old provider<TAB>new provider
-DOWNLOAD_KINDS = ("domains", "new", "deleted", "new_active", "moved")
+# went_live = moved from a parking provider to a real one (same format as moved)
+DOWNLOAD_KINDS = ("domains", "new", "deleted", "new_active", "moved", "went_live")
+PENDING_DROP_FOLDER = LISTS_FOLDER / "pending_drop" / "by_date"
+DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 DOWNLOAD_TOKEN_TTL = 10 * 60  # seconds a prepared download link stays valid
 TLDS_CACHE_TTL = 30 * 60  # seconds the homepage TLD list is cached for
 
@@ -54,6 +57,7 @@ KIND_LABELS = {
     "deleted": "Deleted",
     "new_active": "New (not parked)",
     "moved": "Moved",
+    "went_live": "Went live",
 }
 
 VALID_PATTERNS = {
@@ -844,6 +848,12 @@ def _resolve_download_spec(spec):
 
         return file_path, f"trending-{keyword}-{date}.txt.gz", "application/gzip"
 
+    if spec.get("type") == "pending":
+        path = pending_drop_file(spec.get("date", ""))
+        if path is None:
+            return None
+        return path, f"pending-drop-{spec['date']}.txt.gz", "application/gzip"
+
     if spec.get("type") == "threat":
         source = spec.get("source", "")
         if source not in THREAT_SOURCES:
@@ -889,6 +899,11 @@ def download_prepare():
         if keyword not in load_keywords():
             abort(400)
         spec = {"type": "keyword", "keyword": keyword}
+    elif dtype == "pending":
+        date = str(payload.get("date", "")).strip()
+        if not DATE_RE.match(date):
+            abort(400)
+        spec = {"type": "pending", "date": date}
     elif dtype == "threat":
         source = str(payload.get("source", "")).lower().strip()
         if source not in THREAT_SOURCES:
@@ -1041,24 +1056,34 @@ def provider_page(label):
     )
 
 
-@app.route("/moves")
-def moves():
+def render_moves_page(kind):
     summary = load_summary()
     if summary is None:
         abort(404)
-    date = latest_date_with_domains("all")
     return render_template(
         "moves.html",
         summary=summary,
         sizes=get_download_sizes("all"),
-        date=date,
+        date=latest_date_with_domains("all"),
         search=request.args.get("search", ""),
+        kind=kind,
     )
+
+
+@app.route("/moves")
+def moves():
+    return render_moves_page("moved")
+
+
+@app.route("/went-live")
+def went_live():
+    return render_moves_page("went_live")
 
 
 @app.route("/moves/browse")
 def browse_moves():
     search = request.args.get("search", "")
+    kind = "went_live" if request.args.get("kind") == "went_live" else "moved"
     try:
         page = max(1, int(request.args.get("page", 1)))
     except ValueError:
@@ -1069,7 +1094,7 @@ def browse_moves():
         return jsonify({"domains": [], "has_more": False, "page": page})
 
     lines, has_more, _ = browse_domains(
-        "all", date, "moved", search, page)
+        "all", date, kind, search, page)
     rows = []
     for line in lines:
         domain, _, rest = line.partition("\t")
@@ -1083,6 +1108,71 @@ def browse_moves():
         "per_page": DOMAINS_PER_PAGE,
         "truncated": g.get("search_truncated", False),
     })
+
+
+# ==============================================================
+# Pending drops: domains expected to become registrable soon
+#
+# process_zones.py keeps, per TLD, the domains that left the zone 28-38 days
+# ago and never came back; an expired gTLD domain drops ~35 days after it
+# leaves the zone (30 days redemption + 5 days pending delete). Files are
+# lists/pending_drop/by_date/<expected drop date>.txt.gz.
+# ==============================================================
+def pending_drop_dates():
+    data = load_json(JSON_FOLDER / "pending_drop.json") or {}
+    return data, data.get("dates", {})
+
+
+def pending_drop_file(date):
+    if not date or not DATE_RE.match(date):
+        return None
+    path = PENDING_DROP_FOLDER / f"{date}.txt.gz"
+    return path if path.exists() else None
+
+
+def default_pending_date(dates):
+    """Today's expected drops if there are any, else the nearest upcoming date."""
+    today = datetime.now().strftime("%Y-%m-%d")
+    upcoming = [d for d in dates if d >= today]
+    return upcoming[0] if upcoming else (max(dates) if dates else None)
+
+
+@app.route("/pending-drop", defaults={"date": None})
+@app.route("/pending-drop/<date>")
+def pending_drop(date):
+    data, dates = pending_drop_dates()
+    if not dates:
+        abort(404)
+    if date is None:
+        date = default_pending_date(dates)
+    elif date not in dates:
+        abort(404)
+
+    path = pending_drop_file(date)
+    return render_template(
+        "pending_drop.html",
+        data=data,
+        dates=dates,
+        date=date,
+        today=datetime.now().strftime("%Y-%m-%d"),
+        count=dates.get(date, 0),
+        file_size=path.stat().st_size if path else 0,
+        top_tlds=(data.get("top_tlds") or {}).get(date, {}),
+    )
+
+
+@app.route("/pending-drop/<date>/browse")
+def browse_pending_drop(date):
+    search = request.args.get("search", "")
+    try:
+        page = max(1, int(request.args.get("page", 1)))
+    except ValueError:
+        page = 1
+    path = pending_drop_file(date)
+    if path is None:
+        return jsonify({"domains": [], "has_more": False, "page": page})
+    domains, has_more, _ = browse_domains_from_path(path, search, page)
+    return browse_response(domains, has_more, page)
 
 
 # ==============================================================
@@ -1206,8 +1296,11 @@ def api_index():
             "/api/v1/tld/<tld>/<kind>": (
                 "Direct .txt.gz download; kind is one of domains, new, "
                 "deleted, new_active (new minus parked), moved "
-                "(domain<TAB>old provider<TAB>new provider). Use tld=all for every TLD combined."
+                "(domain<TAB>old provider<TAB>new provider), went_live (moved from a parking "
+                "provider to a real one, same format). Use tld=all for every TLD combined."
             ),
+            "/api/v1/pending-drop": "Expected drop dates with counts (domains that left the zone ~35 days ago and never came back)",
+            "/api/v1/pending-drop/<date>": "Direct .txt.gz download of the domains expected to drop on <date> (YYYY-MM-DD)",
             "/api/v1/providers": "DNS providers: domains, new, parked, gained/lost (moves), DNSSEC, top flows",
             "/api/v1/provider/<label>": "One DNS provider, e.g. cloudflare, domaincontrol (GoDaddy)",
         },
@@ -1331,6 +1424,8 @@ def llms_txt():
         f"- [Unregistered short domains per TLD]({base}/patterns)",
         f"- [DNS provider market share, gains and losses]({base}/providers) ([JSON]({base}/api/v1/providers))",
         f"- [Domains that moved to another DNS provider today]({base}/moves)",
+        f"- [Domains that went live today (moved off a parking page)]({base}/went-live)",
+        f"- [Domains expected to drop (become registrable) soon]({base}/pending-drop) ([JSON]({base}/api/v1/pending-drop))",
         f"- Per TLD: {base}/tld/<tld>/all, {base}/tld/<tld>/new, {base}/tld/<tld>/deleted",
         "",
         "## Largest TLDs",
@@ -1363,6 +1458,23 @@ def api_provider(label):
                     **data["providers"][label]})
 
 
+@app.route("/api/v1/pending-drop")
+def api_pending_drop():
+    data, dates = pending_drop_dates()
+    if not dates:
+        return jsonify({"error": "No data yet"}), 404
+    return jsonify(data)
+
+
+@app.route("/api/v1/pending-drop/<date>")
+def api_pending_drop_file(date):
+    path = pending_drop_file(date)
+    if path is None:
+        return jsonify({"error": "No list for this date"}), 404
+    return send_file(path, as_attachment=True, download_name=f"pending-drop-{date}.txt.gz",
+                     mimetype="application/gzip")
+
+
 @app.route("/api/v1/summary")
 def api_summary():
     summary = load_summary()
@@ -1378,7 +1490,7 @@ def api_tlds():
     if request.args.get("format") == "csv":
         buf = io.StringIO()
         writer = csv.writer(buf)
-        columns = ["tld", "domains", "new", "deleted", "new_parked", "moved", "dnssec",
+        columns = ["tld", "domains", "new", "deleted", "new_parked", "moved", "went_live", "dnssec",
                    "zone_published", "last_updated"]
         writer.writerow(columns)
         for t in tlds:

@@ -1,16 +1,19 @@
 {% extends "base.html" %}
 
-{% block title %}Domains that moved to another DNS provider today | zonelists.com{% endblock %}
+{% set live = kind == 'went_live' %}
+{% set total = (summary.went_live if live else summary.moved) or 0 %}
+
+{% block title %}{{ "Domains that went live today: off a parking page, onto real hosting" if live else "Domains that moved to another DNS provider today" }} | zonelists.com{% endblock %}
 
 {% block header_left %}
-<span class="crumb">Provider moves</span>
+<span class="crumb">{{ "Went live" if live else "Provider moves" }}</span>
 {% endblock %}
 
 {% block header_right %}
 Last update: <span class="font-medium text-gray-900">{{ summary.last_updated }}</span>
 {% endblock %}
 
-{% block description %}{{ "{:,}".format(summary.moved or 0) }} domains changed their DNS provider in the latest zone files, e.g. from GoDaddy to Cloudflare. Browse, search by domain or provider, or download the full list.{% endblock %}
+{% block description %}{% if live %}{{ "{:,}".format(total) }} domains moved from a parking or for-sale page to real nameservers in the latest zone files: new sites going live. Browse, search or download the list.{% else %}{{ "{:,}".format(total) }} domains changed their DNS provider in the latest zone files, e.g. from GoDaddy to Cloudflare. Browse, search by domain or provider, or download the full list.{% endif %}{% endblock %}
 
 {% block main %}
     <main
@@ -34,7 +37,7 @@ Last update: <span class="font-medium text-gray-900">{{ summary.last_updated }}<
                     return;
                 }
                 this.loading = true;
-                const params = new URLSearchParams({ search: this.search, page: this.page });
+                const params = new URLSearchParams({ search: this.search, page: this.page, kind: '{{ kind }}' });
                 fetch('/moves/browse?' + params.toString())
                     .then(r => r.json())
                     .then(data => {
@@ -59,26 +62,39 @@ Last update: <span class="font-medium text-gray-900">{{ summary.last_updated }}<
 
         <div class="max-w-3xl mx-auto text-center mb-10">
             <h1 class="mx-auto text-3xl font-bold text-gray-900 sm:text-4xl sm:leading-none sm:tracking-tight">
-                Domains that moved to another DNS provider
+                {{ "Domains that went live" if live else "Domains that moved to another DNS provider" }}
             </h1>
             <p class="mt-2 text-xl text-gray-600">
-                <span class="font-bold">{{ "{:,}".format(summary.moved or 0) }}</span> domains changed nameserver provider in the latest zone files.
+                {% if live %}
+                <span class="font-bold text-emerald-600">{{ "{:,}".format(total) }}</span> domains moved from a parking or for-sale page to real nameservers in the latest zone files.
+                {% else %}
+                <span class="font-bold">{{ "{:,}".format(total) }}</span> domains changed nameserver provider in the latest zone files.
+                {% endif %}
             </p>
+            {% if live %}
+            <p class="mt-3 text-sm text-gray-500">
+                These domains were on a parking service (Hostinger's default page, Sedo, Bodis, Dan.com...) and
+                now point to a web host or DNS provider, so a site or email is usually being set up right now.
+                See also <a href="{{ url_for('moves') }}" class="text-sky-600 hover:text-sky-800">all provider moves</a>.
+            </p>
+            {% else %}
             <p class="mt-3 text-sm text-gray-500">
                 A domain whose nameservers switch from one provider to another (GoDaddy to Cloudflare, a parking page
                 to a web host) usually just changed host or registrar, or went live. Search by domain or by provider
                 label (e.g. <code class="font-mono">cloudflare</code>, <code class="font-mono">domaincontrol</code>).
-                See the <a href="{{ url_for('providers_page') }}" class="text-sky-600 hover:text-sky-800">provider totals</a>.
+                See the <a href="{{ url_for('providers_page') }}" class="text-sky-600 hover:text-sky-800">provider totals</a>
+                and the domains that <a href="{{ url_for('went_live') }}" class="text-sky-600 hover:text-sky-800">went live</a> (off a parking page).
             </p>
+            {% endif %}
 
             <div class="mt-6">
                 <a
                     href="#download"
-                    @click.prevent="$store.download.open({type: 'tld', tld: 'all', kind: 'moved'}, 'Download all provider moves')"
-                    @mouseenter="$store.download.preview({type: 'tld', tld: 'all', kind: 'moved'}, 'Download all provider moves')"
+                    @click.prevent="$store.download.open({type: 'tld', tld: 'all', kind: '{{ kind }}'}, '{{ 'Download domains that went live' if live else 'Download all provider moves' }}')"
+                    @mouseenter="$store.download.preview({type: 'tld', tld: 'all', kind: '{{ kind }}'}, '{{ 'Download domains that went live' if live else 'Download all provider moves' }}')"
                     class="inline-flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700"
                 >
-                    Download all moves {% if sizes.moved %}<span class="ml-1 text-xs text-gray-300">({{ sizes.moved | filesizeformat }})</span>{% endif %}
+                    {{ "Download the list" if live else "Download all moves" }} {% if sizes[kind] %}<span class="ml-1 text-xs text-gray-300">({{ sizes[kind] | filesizeformat }})</span>{% endif %}
                 </a>
                 <p class="mt-2 text-xs text-gray-400">Tab-separated: domain, old provider, new provider.</p>
             </div>

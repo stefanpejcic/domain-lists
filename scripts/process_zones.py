@@ -35,6 +35,8 @@ Usage:
     process_zones.py --force      # re-process everything
     process_zones.py --local      # process zone files already in downloads/
                                   # instead of downloading (files are kept)
+    process_zones.py --pending    # only rebuild the pending-drop lists from
+                                  # the lists already on disk
 
 Exit codes: 0 = all OK, 1 = some zones failed, 2 = nothing to do.
 """
@@ -90,7 +92,19 @@ LARGE_ZONE_BYTES = 500_000_000
 # Dated lists/json older than this are removed. Full domain snapshots are
 # kept only for the newest date per TLD regardless (they're only needed
 # for the next diff and for downloads).
-KEEP_DAYS = 30
+KEEP_DAYS = 40
+
+# Pending drops: a gTLD domain that leaves the zone because it expired sits
+# in the redemption grace period (~30 days) and pending delete (5 days)
+# before anyone can register it again. So a domain that left the zone
+# DROP_AFTER_DAYS ago and hasn't come back since is expected to drop about
+# now. lists/pending_drop/<tld>.txt.gz holds domain<TAB>left-zone date for
+# every domain that left PENDING_MIN_DAYS..PENDING_MAX_DAYS ago and is still
+# out; by_date/<expected drop date>.txt.gz combines them for the site.
+DROP_AFTER_DAYS = 35
+PENDING_MIN_DAYS = 28
+PENDING_MAX_DAYS = 38  # must stay below KEEP_DAYS: the lists have to still exist
+PENDING_FOLDER = LISTS_FOLDER / "pending_drop"
 
 # CZDS publishes each zone once a day. A zone whose snapshot is younger
 # than this isn't even asked about (one HEAD request per zone otherwise,
@@ -177,7 +191,7 @@ END {
 # from before provider tracking has prev_provider "?" (unknown: never a
 # move). Writes the new/deleted/new_active/moved lists (when write=1) and
 # prints the counters:
-#     S total new deleted moved new_parked dnssec
+#     S total new deleted moved new_parked dnssec went_live
 #     P provider domains new new_parked gained lost deleted dnssec
 #     F from>to count
 AWK_DIFF = r"""
@@ -210,9 +224,11 @@ $4 == "-" {
 $4 != "?" && $4 != $2 {
     moved++; seen[$4] = 1; gain[$2]++; lose[$4]++; flow[$4 ">" $2]++
     print $1 "\t" $4 "\t" $2 > mv
+    # from a parking / for-sale page to real nameservers: the site is going live
+    if (parked($4) && !parked($2)) { live++; print $1 "\t" $4 "\t" $2 > wl }
 }
 END {
-    printf "S\t%d\t%d\t%d\t%d\t%d\t%d\n", total, added, deleted, moved, nparked, dsn
+    printf "S\t%d\t%d\t%d\t%d\t%d\t%d\t%d\n", total, added, deleted, moved, nparked, dsn, live
     for (p in seen)
         printf "P\t%s\t%d\t%d\t%d\t%d\t%d\t%d\t%d\n", p, tot[p], np[p], npp[p], gain[p], lose[p], dp[p], dsp[p]
     for (f in flow) printf "F\t%s\t%d\n", f, flow[f]
@@ -358,6 +374,7 @@ def diff_snapshots(current_ns, previous, previous_has_ns, out):
             "-v", f"del={out['deleted']}",
             "-v", f"act={out['new_active']}",
             "-v", f"mv={out['moved']}",
+            "-v", f"wl={out['went_live']}",
             AWK_DIFF,
         ],
         stdin=p_join.stdout,
@@ -375,7 +392,7 @@ def diff_snapshots(current_ns, previous, previous_has_ns, out):
     for line in output.splitlines():
         parts = line.split("\t")
         if parts[0] == "S":
-            keys = ("domains", "new", "deleted", "moved", "new_parked", "dnssec")
+            keys = ("domains", "new", "deleted", "moved", "new_parked", "dnssec", "went_live")
             stats = dict(zip(keys, map(int, parts[1:])))
         elif parts[0] == "P" and parts[1] not in ("", "-", "?"):
             keys = ("domains", "new", "new_parked", "gained", "lost", "deleted", "dnssec")
@@ -384,7 +401,7 @@ def diff_snapshots(current_ns, previous, previous_has_ns, out):
             flows[parts[1]] = int(parts[2])
 
     if previous is None:
-        stats.update(new=0, deleted=0, moved=0, new_parked=0)
+        stats.update(new=0, deleted=0, moved=0, new_parked=0, went_live=0)
         for p in providers.values():
             p.update(new=0, new_parked=0, gained=0, lost=0, deleted=0)
     return stats, providers, flows
@@ -505,7 +522,7 @@ def recently_published(tld):
 # Process one TLD
 # ==============================================================
 
-LIST_KINDS = ("new", "deleted", "new_active", "moved")
+LIST_KINDS = ("new", "deleted", "new_active", "moved", "went_live")
 
 
 def process_tld(tld, zone_file, published):
@@ -570,6 +587,7 @@ def process_tld(tld, zone_file, published):
         }
         write_tld_json(result, datetime.now(TIMEZONE).isoformat(timespec="seconds"))
         write_providers_json(tld, date, providers, flows)
+        result["pending_drop"] = update_pending_drop(tld, date)
 
         vs = ""
         if previous is not None:
@@ -579,12 +597,102 @@ def process_tld(tld, zone_file, published):
         log(
             f"{tld}: {stats['domains']:,} total, {stats['new']:,} new "
             f"({stats['new_parked']:,} parked), {stats['deleted']:,} deleted, "
-            f"{stats['moved']:,} moved, {result['elapsed']:.2f}s{vs}"
+            f"{stats['moved']:,} moved ({stats['went_live']:,} went live), "
+            f"{result['elapsed']:.2f}s{vs}"
         )
         return result
 
     finally:
         shutil.rmtree(work_dir, ignore_errors=True)
+
+
+def read_list(path):
+    try:
+        with gzip.open(path, "rt", encoding="utf-8", errors="replace") as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    yield line
+    except OSError:
+        return
+
+
+def update_pending_drop(tld, date):
+    """
+    Rewrite lists/pending_drop/<tld>.txt.gz: domains that left the zone
+    PENDING_MIN_DAYS..PENDING_MAX_DAYS before `date` and haven't been in a
+    new list since. Walks the (small) daily new/deleted lists in date
+    order, so a domain that came back and left again counts from its last
+    departure. Returns the number of pending domains.
+    """
+    day = datetime.strptime(date, "%Y-%m-%d")
+    oldest = (day - timedelta(days=PENDING_MAX_DAYS)).strftime("%Y-%m-%d")
+    newest = (day - timedelta(days=PENDING_MIN_DAYS)).strftime("%Y-%m-%d")
+
+    pending = {}
+    for folder in reversed(date_folders()):  # oldest first
+        if not (oldest <= folder.name <= date):
+            continue
+        for domain in read_list(folder / "new" / f"{tld}.txt.gz"):
+            pending.pop(domain, None)
+        if folder.name <= newest:
+            for domain in read_list(folder / "deleted" / f"{tld}.txt.gz"):
+                pending[domain] = folder.name
+
+    PENDING_FOLDER.mkdir(parents=True, exist_ok=True)
+    out = PENDING_FOLDER / f"{tld}.txt.gz"
+    tmp = Path(str(out) + ".tmp")
+    with gzip.open(tmp, "wt", encoding="utf-8", compresslevel=6) as f:
+        for domain in sorted(pending):
+            f.write(f"{domain}\t{pending[domain]}\n")
+    os.replace(tmp, out)
+    return len(pending)
+
+
+def write_pending_drop_combined(updated_at):
+    """
+    lists/pending_drop/by_date/<expected drop date>.txt.gz from every TLD's
+    pending file, and json/pending_drop.json with the counts.
+    """
+    by_date_folder = PENDING_FOLDER / "by_date"
+    by_date_folder.mkdir(parents=True, exist_ok=True)
+    tmp_folder = PENDING_FOLDER / "by_date.tmp"
+    shutil.rmtree(tmp_folder, ignore_errors=True)
+    tmp_folder.mkdir()
+
+    writers, counts, by_tld = {}, {}, {}
+    try:
+        for path in sorted(PENDING_FOLDER.glob("*.txt.gz")):
+            tld = path.name[: -len(".txt.gz")]
+            for line in read_list(path):
+                domain, _, left = line.partition("\t")
+                try:
+                    drop = (datetime.strptime(left, "%Y-%m-%d") + timedelta(days=DROP_AFTER_DAYS)).strftime("%Y-%m-%d")
+                except ValueError:
+                    continue
+                if drop not in writers:
+                    writers[drop] = gzip.open(tmp_folder / f"{drop}.txt.gz", "wt", encoding="utf-8", compresslevel=6)
+                writers[drop].write(domain + "\n")
+                counts[drop] = counts.get(drop, 0) + 1
+                by_tld.setdefault(drop, {})[tld] = by_tld.get(drop, {}).get(tld, 0) + 1
+    finally:
+        for w in writers.values():
+            w.close()
+
+    shutil.rmtree(by_date_folder, ignore_errors=True)
+    os.replace(tmp_folder, by_date_folder)
+
+    write_json_atomic(JSON_FOLDER / "pending_drop.json", {
+        "drop_after_days": DROP_AFTER_DAYS,
+        "dates": dict(sorted(counts.items())),
+        "top_tlds": {
+            d: dict(sorted(t.items(), key=lambda kv: kv[1], reverse=True)[:15])
+            for d, t in sorted(by_tld.items())
+        },
+        "last_updated": updated_at,
+        "timezone": TIMEZONE_NAME,
+    })
+    log(f"Pending drops: {sum(counts.values()):,} domains over {len(counts)} expected drop dates")
 
 
 def run_job(tld, token, local, published):
@@ -636,6 +744,7 @@ def write_tld_json(result, updated_at):
         "deleted": result.get("deleted", 0),
         "new_parked": result.get("new_parked", 0),
         "moved": result.get("moved", 0),
+        "went_live": result.get("went_live", 0),
         "dnssec": result.get("dnssec", 0),
         "zone_published": result.get("zone_published"),
         "last_updated": updated_at,
@@ -673,7 +782,7 @@ def load_json(path):
         return None
 
 
-SUMMED_KEYS = ("domains", "new", "deleted", "new_parked", "moved", "dnssec")
+SUMMED_KEYS = ("domains", "new", "deleted", "new_parked", "moved", "went_live", "dnssec")
 
 
 def generate_summary_json(updated_at):
@@ -910,6 +1019,14 @@ def main():
         print("Another process_zones.py run is in progress - exiting.")
         return 2
 
+    if "--pending" in args:
+        for tld_folder in sorted(JSON_FOLDER.iterdir()):
+            data = load_json(tld_folder / "latest") if tld_folder.is_dir() else None
+            if data and data.get("date"):
+                update_pending_drop(data.get("tld", tld_folder.name), data["date"])
+        write_pending_drop_combined(datetime.now(TIMEZONE).isoformat(timespec="seconds"))
+        return 0
+
     log("")
     log("==============================================")
     log("Zone File Processing")
@@ -975,6 +1092,8 @@ def main():
     summary = generate_summary_json(updated_at)
     for date in sorted({r["date"] for r in succeeded}):
         write_combined_lists(date, summary, updated_at)
+    if succeeded:
+        write_pending_drop_combined(updated_at)
     prune_old_data()
 
     log("")

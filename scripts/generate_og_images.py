@@ -127,6 +127,15 @@ def title_and_subtitle(path):
         name = " + ".join(names.get(p, p) for p in label.split("+"))
         return name, f"{info.get('domains', 0):,} domains, DNS provider stats"
 
+    if parts[0] == "pending-drop":
+        data = load_json(JSON_FOLDER / "pending_drop.json") or {}
+        total = sum((data.get("dates") or {}).values())
+        return "Pending Drop Domains", f"{total:,} domains expected to become available soon"
+
+    if parts[0] == "went-live":
+        summary = load_json(JSON_FOLDER / "summary.json") or {}
+        return "Domains Going Live", f"{summary.get('went_live', 0):,} domains moved off a parking page"
+
     if parts[0] == "moves":
         summary = load_json(JSON_FOLDER / "summary.json") or {}
         return "DNS Provider Moves", f"{summary.get('moved', 0):,} domains changed DNS provider"

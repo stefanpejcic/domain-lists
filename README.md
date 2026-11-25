@@ -87,6 +87,19 @@ the domain left the zone (expired, on hold, or nameservers removed), not
 that it can be registered: expired domains usually stay registered for
 another 30-35 days.
 
+### Pending drops and domains going live
+
+- `/pending-drop`: an expired gTLD domain leaves the zone, then spends ~30
+  days in redemption and 5 in pending delete before it can be registered.
+  `process_zones.py` keeps, per TLD, the domains that left the zone 28-38
+  days ago and never reappeared in a `new` list since
+  (`lists/pending_drop/<tld>.txt.gz`), and buckets them by expected drop date
+  (left + 35 days) into `lists/pending_drop/by_date/<date>.txt.gz` and
+  `json/pending_drop.json`. `process_zones.py --pending` rebuilds them from
+  the lists on disk. Dated lists are kept 40 days (`KEEP_DAYS`) for this.
+- `/went-live`: moves from a parking provider to a real one
+  (`lists/<date>/went_live/`, same format as `moved/`).
+
 ### Trending keyword lists
 
 `/trending` and `/trending/<keyword>` browse domains registered today that

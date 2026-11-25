@@ -105,7 +105,8 @@ Last update: <span class="font-medium text-gray-900">{{ summary.last_updated }}<
                 These domains left the zone file: they expired, were put on hold, or lost their nameservers.
                 An expired domain usually stays registered for about 30-35 more days (redemption and pending
                 delete) before anyone can register it, and a domain on hold may come back, so most of these are
-                not available yet. Useful for drop-catching watchlists, brand monitoring, and research.
+                not available yet. For domains that should become registrable now, see the
+                <a href="{{ url_for('pending_drop') }}" class="text-sky-600 hover:text-sky-800">pending drop list</a>.
             </p>
 
             <div class="mt-6">

@@ -73,6 +73,8 @@ def main():
     add("/deleted", None, "daily", "0.5")
     add("/providers", None, "daily", "0.7")
     add("/moves", None, "daily", "0.6")
+    add("/went-live", None, "daily", "0.6")
+    add("/pending-drop", None, "daily", "0.8")
 
     # the biggest provider pages (json/providers.json from generate_providers.py)
     providers = (load_json(JSON_FOLDER / "providers.json") or {}).get("providers", {})
