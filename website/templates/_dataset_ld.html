@@ -1,0 +1,21 @@
+{# schema.org Dataset for a list page: Google Dataset Search and AI answer engines read it. #}
+{% macro dataset(name, description, content_url, date_modified, keywords=[]) %}
+<script type="application/ld+json">
+{
+    "@context": "https://schema.org",
+    "@type": "Dataset",
+    "name": {{ name | tojson }},
+    "description": {{ description | tojson }},
+    "url": {{ (site_url ~ request.path) | tojson }},
+    "keywords": {{ keywords | tojson }},
+    "isAccessibleForFree": true,
+    "creator": {"@type": "Organization", "name": "zonelists.com", "url": {{ (site_url ~ "/") | tojson }}},
+    "dateModified": {{ date_modified | tojson }},
+    "distribution": [{
+        "@type": "DataDownload",
+        "encodingFormat": "application/gzip",
+        "contentUrl": {{ (site_url ~ content_url) | tojson }}
+    }]
+}
+</script>
+{% endmacro %}

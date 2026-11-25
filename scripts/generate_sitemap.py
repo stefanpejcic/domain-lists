@@ -27,6 +27,9 @@ OUTPUT_FILE = REPO_ROOT / "sitemap.xml"
 load_dotenv(REPO_ROOT / "website" / ".env")
 SITE_URL = os.getenv("SITE_URL", "").rstrip("/")
 
+# Mirrors website/app.py's THREAT_SOURCES keys.
+THREAT_SOURCES = ["all", "openphish", "phishtank", "certpl", "phishingarmy", "phishingdatabase", "safebrowsing"]
+
 # Mirrors website/app.py's VALID_PATTERNS keys.
 DELETED_PATTERNS = [
     "one-letter", "2-letters", "3-letters", "4-letters",
@@ -75,6 +78,16 @@ def main():
     add("/moves", None, "daily", "0.6")
     add("/went-live", None, "daily", "0.6")
     add("/pending-drop", None, "daily", "0.8")
+    for date in (load_json(JSON_FOLDER / "pending_drop.json") or {}).get("dates", {}):
+        add(f"/pending-drop/{date}", None, "daily", "0.5")
+
+    add("/trending", None, "daily", "0.6")
+    for keyword in (load_json(REPO_ROOT / "keywords.json") or {}).get("keywords", []):
+        add(f"/trending/{quote(keyword.strip().lower())}", None, "daily", "0.4")
+
+    add("/threats", None, "daily", "0.6")
+    for source in THREAT_SOURCES:
+        add(f"/threats/{source}", None, "daily", "0.4")
 
     # the biggest provider pages (json/providers.json from generate_providers.py)
     providers = (load_json(JSON_FOLDER / "providers.json") or {}).get("providers", {})
@@ -89,6 +102,11 @@ def main():
         tld = data["tld"]
         lastmod = (data.get("last_updated") or "")[:10] or None
         add(f"/tld/{tld}/all", lastmod, "daily", "0.6")
+        # separate pages ("newly registered .xyz domains"), worth indexing where there is something to show
+        if data.get("new"):
+            add(f"/tld/{tld}/new", lastmod, "daily", "0.5")
+        if data.get("deleted"):
+            add(f"/tld/{tld}/deleted", lastmod, "daily", "0.4")
         tld_count += 1
 
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")

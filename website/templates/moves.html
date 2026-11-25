@@ -5,6 +5,11 @@
 
 {% block title %}{{ "Domains that went live today: off a parking page, onto real hosting" if live else "Domains that moved to another DNS provider today" }} | zonelists.com{% endblock %}
 
+{% block structured_data %}
+{% from "_dataset_ld.html" import dataset %}
+{{ dataset(("Domains that went live (moved off a parking page)" if live else "Domains that changed DNS provider"), (("Daily list of domains whose nameservers moved from a parking or for-sale service to a real DNS or hosting provider: " if live else "Daily list of domains whose nameservers moved to another DNS provider, with the old and new provider: ") ~ "{:,}".format(total) ~ " domains in the " ~ (summary.date or "") ~ " zone files."), "/api/v1/tld/all/" ~ kind, summary.last_updated, ["dns provider changes", "domain hosting migrations", "new websites", "nameserver changes"]) }}
+{% endblock %}
+
 {% block header_left %}
 <span class="crumb">{{ "Went live" if live else "Provider moves" }}</span>
 {% endblock %}
@@ -101,6 +106,8 @@ Last update: <span class="font-medium text-gray-900">{{ summary.last_updated }}<
         </div>
 
         {% include "_download_section.html" %}
+{% set preview_rows = preview_list('tld', 'all', kind) %}{% set preview_title = "Domains that went live" if live else "Domains that moved DNS provider" %}{% set preview_api = "/api/v1/tld/all/" ~ kind %}
+        {% include "_preview.html" %}
 
         <div class="relative p-6 border border-gray-200 rounded-lg shadow-sm bg-gray-50/50">
             <div class="flex gap-2 justify-between mb-4 items-center flex-wrap">

@@ -57,6 +57,10 @@
     </script>
     {% block structured_data %}{% endblock %}
 
+    <!-- for AI agents: plain-language site summary and the API description -->
+    <link rel="alternate" type="text/plain" title="Site summary for LLMs" href="{{ site_url }}/llms.txt">
+    <link rel="alternate" type="application/json" title="OpenAPI" href="{{ site_url }}/api/v1/openapi.json">
+
     <link rel="stylesheet" href="{{ static_url('css/style.css') }}">
 
     <!-- Alpine.js -->

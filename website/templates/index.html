@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 
-{% block title %}zonelists.com | Download Domain Lists for {{ "{:,}".format(summary.tlds) }} TLDs{% endblock %}
+{% block title %}Free domain lists: all, newly registered and deleted domains in {{ "{:,}".format(summary.tlds) }} TLDs | zonelists.com{% endblock %}
 
-{% block description %}Download a free list of {{ "{:,}".format(summary.domains) }} registered domains across {{ "{:,}".format(summary.tlds) }} TLDs, updated daily. Includes newly registered and deleted domain lists for every zone.{% endblock %}
+{% block description %}Free daily lists of {{ "{:,}".format(summary.domains) }} registered domains in {{ "{:,}".format(summary.tlds) }} gTLDs from ICANN zone files: newly registered domains, deleted and pending delete domains, DNS provider changes. No sign-up, no API key.{% endblock %}
 
 {% block body_data %}
 <script id="tlds-data" type="application/json">
@@ -17,6 +17,62 @@
 {% endblock %}
 
 {% block structured_data %}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "Where does the data come from?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "From the official zone files of every generic TLD (.com, .net, .org, .xyz and 1,000+ more), published daily by the registries through ICANN's Centralized Zone Data Service (CZDS). A zone file lists every domain that has nameservers, with those nameservers."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "How often is it updated?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Every zone is processed within about an hour of its registry publishing it in CZDS, once a day per zone. Most zones arrive between 00:00 and 10:00 UTC; .com usually around 06:00 UTC."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Is it free? Do I need an account or API key?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Everything is free and needs no account. Files download directly from the API (for example /api/v1/tld/com/new for today's new .com domains); the API allows 60 requests per minute per IP."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "What is the difference between deleted and pending drop domains?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "A deleted domain left the zone file today: it expired, was put on hold, or lost its nameservers, and it usually stays registered for 30 to 35 more days. Pending drop lists the domains that left the zone about 35 days ago and never came back, so they are expected to become available to register now."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Why are .uk, .de and other country-code TLDs missing?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "ICANN CZDS only covers generic TLDs. Country-code registries don't publish their zone files there, and most don't publish them at all."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Can AI agents and scripts use this site?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes. /llms.txt summarizes the site for language models, /api/v1/openapi.json describes the API, and every list is plain gzip text with one domain per line."
+      }
+    }
+  ]
+}
+</script>
 <script type="application/ld+json">
 {
     "@context": "https://schema.org",
@@ -435,6 +491,37 @@
             </div>
 
 
+
+
+<section class="mt-12 max-w-3xl mx-auto">
+    <h2 class="text-2xl font-bold text-gray-900">Frequently asked questions</h2>
+    <dl class="mt-6 space-y-6">
+        <div>
+            <dt class="font-semibold text-gray-900">Where does the data come from?</dt>
+            <dd class="mt-1 text-gray-600">From the official zone files of every generic TLD (.com, .net, .org, .xyz and 1,000+ more), published daily by the registries through ICANN's Centralized Zone Data Service (CZDS). A zone file lists every domain that has nameservers, with those nameservers.</dd>
+        </div>
+        <div>
+            <dt class="font-semibold text-gray-900">How often is it updated?</dt>
+            <dd class="mt-1 text-gray-600">Every zone is processed within about an hour of its registry publishing it in CZDS, once a day per zone. Most zones arrive between 00:00 and 10:00 UTC; .com usually around 06:00 UTC.</dd>
+        </div>
+        <div>
+            <dt class="font-semibold text-gray-900">Is it free? Do I need an account or API key?</dt>
+            <dd class="mt-1 text-gray-600">Everything is free and needs no account. Files download directly from the API (for example /api/v1/tld/com/new for today's new .com domains); the API allows 60 requests per minute per IP.</dd>
+        </div>
+        <div>
+            <dt class="font-semibold text-gray-900">What is the difference between deleted and pending drop domains?</dt>
+            <dd class="mt-1 text-gray-600">A deleted domain left the zone file today: it expired, was put on hold, or lost its nameservers, and it usually stays registered for 30 to 35 more days. Pending drop lists the domains that left the zone about 35 days ago and never came back, so they are expected to become available to register now.</dd>
+        </div>
+        <div>
+            <dt class="font-semibold text-gray-900">Why are .uk, .de and other country-code TLDs missing?</dt>
+            <dd class="mt-1 text-gray-600">ICANN CZDS only covers generic TLDs. Country-code registries don't publish their zone files there, and most don't publish them at all.</dd>
+        </div>
+        <div>
+            <dt class="font-semibold text-gray-900">Can AI agents and scripts use this site?</dt>
+            <dd class="mt-1 text-gray-600">Yes. /llms.txt summarizes the site for language models, /api/v1/openapi.json describes the API, and every list is plain gzip text with one domain per line.</dd>
+        </div>
+    </dl>
+</section>
 
 {% endblock %}
 

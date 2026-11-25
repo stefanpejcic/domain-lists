@@ -295,6 +295,8 @@
             </div>
 
             {% include "_download_section.html" %}
+{% set preview_rows = preview_list('keyword', keyword) %}{% set preview_title = "Domains registered today containing \"" ~ keyword ~ "\"" %}{% set preview_api = "/trending/" ~ keyword %}
+            {% include "_preview.html" %}
 
 
             <!-- Domain browser -->

@@ -1,6 +1,11 @@
 {% extends "base.html" %}
 
-{% block title %}Recently dropped domains | zonelists.com{% endblock %}
+{% block title %}Deleted domains today: {{ "{:,}".format(summary.deleted) }} domains left the zone files | zonelists.com{% endblock %}
+
+{% block structured_data %}
+{% from "_dataset_ld.html" import dataset %}
+{{ dataset("Domains deleted from gTLD zone files today", "Daily list of domain names that left the zone files of " ~ "{:,}".format(summary.tlds) ~ " generic TLDs (expired, on hold or without nameservers): " ~ "{:,}".format(summary.deleted) ~ " domains in the " ~ (summary.date or "") ~ " snapshot. Built from ICANN CZDS zone files.", "/api/v1/tld/all/deleted", summary.last_updated, ["deleted domains", "dropped domains", "expired domains list", "zone file"]) }}
+{% endblock %}
 
 {% block header_left %}
 <span class="crumb">Dropped domains</span>
@@ -126,6 +131,8 @@ Last update: <span class="font-medium text-gray-900">{{ summary.last_updated }}<
         </div>
 
         {% include "_download_section.html" %}
+{% set preview_rows = preview_list('tld', 'all', 'deleted') %}{% set preview_title = "Domains that left the zone files" %}{% set preview_api = "/api/v1/tld/all/deleted" %}
+        {% include "_preview.html" %}
 
         <div class="relative p-6 pt-8 border border-gray-200 rounded-lg shadow-sm bg-gray-50/50">
             <div class="absolute left-0 right-0 flex items-center justify-center -top-4">

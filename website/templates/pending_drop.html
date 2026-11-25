@@ -4,6 +4,11 @@
 
 {% block description %}{{ "{:,}".format(count) }} domains are expected to drop and become available to register on {{ date }}: they left the zone file about {{ data.drop_after_days }} days ago (expired, then redemption and pending delete) and never came back. Free daily pending delete list for every gTLD.{% endblock %}
 
+{% block structured_data %}
+{% from "_dataset_ld.html" import dataset %}
+{{ dataset("Pending delete domains expected to drop on " ~ date, "Domains expected to become available to register on " ~ date ~ ": they left their gTLD zone file " ~ data.drop_after_days ~ " days earlier (expiry, redemption, pending delete) and never came back. " ~ "{:,}".format(count) ~ " domains.", "/api/v1/pending-drop/" ~ date, data.last_updated, ["pending delete domains", "expiring domains", "drop list", "domains dropping today", "expired domains"]) }}
+{% endblock %}
+
 {% block header_left %}
 <span class="crumb">Pending drop</span>
 {% endblock %}
@@ -101,6 +106,8 @@ Last update: <span class="font-medium text-gray-900">{{ data.last_updated }}</sp
         </div>
 
         {% include "_download_section.html" %}
+{% set preview_rows = preview_list('pending', date) %}{% set preview_title = "Domains expected to drop on " ~ date %}{% set preview_api = "/api/v1/pending-drop/" ~ date %}
+        {% include "_preview.html" %}
 
         <div class="relative p-6 border border-gray-200 rounded-lg shadow-sm bg-gray-50/50">
             <div class="flex gap-2 justify-between mb-4 items-center flex-wrap">

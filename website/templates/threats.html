@@ -290,6 +290,8 @@
             </div>
 
             {% include "_download_section.html" %}
+{% set preview_rows = preview_list('threat', source) %}{% set preview_title = "New domains flagged by " ~ source_label %}{% set preview_api = "/threats/" ~ source %}
+            {% include "_preview.html" %}
 
 
             <!-- Domain browser -->

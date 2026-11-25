@@ -244,6 +244,8 @@ x-data="{
         </div>
 
         {% include "_download_section.html" %}
+{% set preview_rows = preview_list('tld', data.tld, kind) %}{% set preview_title = kind_word[:1] | upper ~ kind_word[1:] ~ " ." ~ (data.tld | to_unicode) ~ " domains" %}{% set preview_api = "/api/v1/tld/" ~ data.tld ~ "/" ~ kind %}
+        {% include "_preview.html" %}
 
         <div class="relative p-6 pt-8 border border-gray-200 rounded-lg shadow-sm bg-gray-50/50">
             <div class="absolute left-0 right-0 flex items-center justify-center -top-4">
