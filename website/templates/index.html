@@ -433,16 +433,6 @@
             </div>
 
 
-            <!-- Server-rendered A-Z directory, so crawlers and AI agents can reach every TLD page without JavaScript -->
-            <section class="mt-8 rounded-xl border bg-white p-6 shadow-sm">
-                <h2 class="text-lg font-semibold text-gray-900">All TLDs A&ndash;Z</h2>
-                <p class="mt-1 text-sm text-gray-500">Every zone we track, with the number of registered domains.</p>
-                <ul class="mt-4 flex flex-wrap text-sm" style="column-gap: 16px; row-gap: 4px">
-                    {% for t in tlds %}
-                    <li><a href="/tld/{{ t.tld }}/all" class="text-sky-600 hover:text-sky-800">.{{ t.tld | to_unicode }}</a> <span class="text-gray-400">{{ "{:,}".format(t.domains or 0) }}</span></li>
-                    {% endfor %}
-                </ul>
-            </section>
 
 {% endblock %}
 
