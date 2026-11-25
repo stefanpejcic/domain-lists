@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
 {% set name = label | provider_name %}
-{% block title %}{{ name }}: {{ "{:,}".format(info.domains) }} domains, gains and losses ({{ data.date }}) | zonelists.com{% endblock %}
+{% block title %}{{ name }}: {{ "{:,}".format(info.domains) }} domains, gains and losses ({{ data.date }}) | {{ site_name }}{% endblock %}
 
 {% block description %}{{ name }} runs the nameservers of {{ "{:,}".format(info.domains) }} domains in {{ info.tlds }} TLDs ({{ "%.2f" | format(share) }}% of all domains we track). Daily new registrations, domains moved in and out, and the providers they came from or left for.{% endblock %}
 

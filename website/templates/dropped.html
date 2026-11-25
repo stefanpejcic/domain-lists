@@ -1,9 +1,9 @@
 {% extends "base.html" %}
 
-{% block title %}Deleted domains today: {{ "{:,}".format(summary.deleted) }} domains left the zone files | zonelists.com{% endblock %}
+{% block title %}Deleted domains today: {{ "{:,}".format(summary.deleted) }} domains left the zone files | {{ site_name }}{% endblock %}
 
 {% block structured_data %}
-{% from "_dataset_ld.html" import dataset %}
+{% from "_dataset_ld.html" import dataset with context %}
 {{ dataset("Domains deleted from gTLD zone files today", "Daily list of domain names that left the zone files of " ~ "{:,}".format(summary.tlds) ~ " generic TLDs (expired, on hold or without nameservers): " ~ "{:,}".format(summary.deleted) ~ " domains in the " ~ (summary.date or "") ~ " snapshot. Built from ICANN CZDS zone files.", "/api/v1/tld/all/deleted", summary.last_updated, ["deleted domains", "dropped domains", "expired domains list", "zone file"]) }}
 {% endblock %}
 

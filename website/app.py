@@ -28,6 +28,9 @@ PROVIDERS_CONFIG = REPO_ROOT / "providers.json"
 load_dotenv(BASE_DIR / ".env")
 # Primary domain for canonical/og URLs, so the site can be served on several domains
 SITE_URL = os.getenv("SITE_URL", "").strip().rstrip("/")
+# Shown as the site's name (titles, logo, structured data, llms.txt); the
+# domain of SITE_URL unless set.
+SITE_NAME = os.getenv("SITE_NAME", "").strip() or (re.sub(r"^https?://", "", SITE_URL) or "Domain Lists")
 DOMAINS_PER_PAGE = 100
 # a search or deep page on a huge list (.com is 168M domains) stops after this, so it can't tie up a server thread
 SEARCH_TIME_LIMIT = 3  # seconds
@@ -474,7 +477,9 @@ def cache_static_files(response):
 
 @app.context_processor
 def inject_site_url():
-    return {"site_url": site_url()}
+    name_word, dot, name_rest = SITE_NAME.partition(".")
+    return {"site_url": site_url(), "site_name": SITE_NAME,
+            "site_name_word": name_word, "site_name_rest": dot + name_rest}
 
 
 # Mirrors scripts/generate_og_images.py's slugify_path() - both must
@@ -1366,7 +1371,7 @@ def api_openapi():
     return jsonify({
         "openapi": "3.1.0",
         "info": {
-            "title": "zonelists.com API",
+            "title": f"{SITE_NAME} API",
             "version": "1.0",
             "description": (
                 "Daily lists of registered, newly registered and deleted domains for every gTLD, "
@@ -1426,7 +1431,7 @@ def llms_txt():
         return f"{int(value or 0):,}"
 
     lines = [
-        "# zonelists.com",
+        f"# {SITE_NAME}",
         "",
         f"> Free, daily-updated lists of every registered domain name in {n(summary.get('tlds'))} generic TLDs, "
         "built from ICANN CZDS zone files: all registered domains, newly registered domains and deleted (dropped) "

@@ -9,7 +9,7 @@
     "url": {{ (site_url ~ request.path) | tojson }},
     "keywords": {{ keywords | tojson }},
     "isAccessibleForFree": true,
-    "creator": {"@type": "Organization", "name": "zonelists.com", "url": {{ (site_url ~ "/") | tojson }}},
+    "creator": {"@type": "Organization", "name": {{ site_name | tojson }}, "url": {{ (site_url ~ "/") | tojson }}},
     "dateModified": {{ date_modified | tojson }},
     "distribution": [{
         "@type": "DataDownload",

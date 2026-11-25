@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Free domain lists: all, newly registered and deleted domains in {{ "{:,}".format(summary.tlds) }} TLDs | zonelists.com{% endblock %}
+{% block title %}Free domain lists: all, newly registered and deleted domains in {{ "{:,}".format(summary.tlds) }} TLDs | {{ site_name }}{% endblock %}
 
 {% block description %}Free daily lists of {{ "{:,}".format(summary.domains) }} registered domains in {{ "{:,}".format(summary.tlds) }} gTLDs from ICANN zone files: newly registered domains, deleted and pending delete domains, DNS provider changes. No sign-up, no API key.{% endblock %}
 
@@ -77,10 +77,10 @@
 {
     "@context": "https://schema.org",
     "@type": "DataCatalog",
-    "name": "zonelists.com domain lists",
+    "name": {{ (site_name ~ " domain lists") | tojson }},
     "description": {{ ("Free, daily-updated lists of all registered, newly registered and deleted domain names for " ~ "{:,}".format(summary.tlds) ~ " generic TLDs, built from ICANN CZDS zone files. " ~ "{:,}".format(summary.domains) ~ " registered domains as of " ~ (summary.date or "") ~ ".") | tojson }},
     "url": {{ (site_url ~ "/") | tojson }},
-    "creator": {"@type": "Organization", "name": "zonelists.com", "url": {{ (site_url ~ "/") | tojson }}},
+    "creator": {"@type": "Organization", "name": {{ site_name | tojson }}, "url": {{ (site_url ~ "/") | tojson }}},
     "dateModified": {{ summary.last_updated | tojson }},
     "dataset": [
         {% for t in tlds | sort(attribute='domains', reverse=True) %}{% if loop.index <= 50 %}{% if loop.index > 1 %},{% endif %}

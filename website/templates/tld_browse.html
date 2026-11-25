@@ -2,7 +2,7 @@
 
 {% set kind_word = 'newly registered' if kind == 'new' else ('deleted' if kind == 'deleted' else 'all registered') %}
 {% set kind_count = data.new if kind == 'new' else (data.deleted if kind == 'deleted' else data.domains) %}
-{% block title %}List of {{ kind_word }} .{{ data.tld | to_unicode }} domains ({{ "{:,}".format(kind_count) }}) | zonelists.com{% endblock %}
+{% block title %}List of {{ kind_word }} .{{ data.tld | to_unicode }} domains ({{ "{:,}".format(kind_count) }}) | {{ site_name }}{% endblock %}
 
 {% block structured_data %}
 <script type="application/ld+json">
@@ -14,7 +14,7 @@
     "url": {{ (site_url ~ request.path) | tojson }},
     "keywords": {{ ["." ~ data.tld ~ " domains", "list of ." ~ data.tld ~ " domains", "." ~ data.tld ~ " zone file", "newly registered domains", "deleted domains", "domain list"] | tojson }},
     "isAccessibleForFree": true,
-    "creator": {"@type": "Organization", "name": "zonelists.com", "url": {{ (site_url ~ "/") | tojson }}},
+    "creator": {"@type": "Organization", "name": {{ site_name | tojson }}, "url": {{ (site_url ~ "/") | tojson }}},
     "dateModified": {{ data.last_updated | tojson }},
     "temporalCoverage": {{ data.date | tojson }},
     "distribution": [{

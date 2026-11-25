@@ -12,12 +12,14 @@ current request path.
 Usage: python3 scripts/generate_og_images.py
 """
 import json
+import os
 import re
 import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
+from dotenv import load_dotenv
 from PIL import Image, ImageDraw, ImageFont
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -25,9 +27,15 @@ SITEMAP_FILE = REPO_ROOT / "sitemap.xml"
 JSON_FOLDER = REPO_ROOT / "json"
 OUTPUT_FOLDER = REPO_ROOT / "website" / "static" / "og"
 
+load_dotenv(REPO_ROOT / "website" / ".env")
+# mirrors website/app.py's SITE_NAME
+SITE_NAME = os.getenv("SITE_NAME", "").strip() or (
+    re.sub(r"^https?://", "", os.getenv("SITE_URL", "").strip().rstrip("/")) or "Domain Lists"
+)
+
 MANIFEST_FILE = OUTPUT_FOLDER / ".manifest.json"
 # bump when render_image() changes, so every image is drawn again
-RENDER_VERSION = 1
+RENDER_VERSION = 2
 
 WIDTH, HEIGHT = 1200, 630
 BG_COLOR = (2, 132, 199)          # sky-600, matches the site's brand color
@@ -90,7 +98,7 @@ def title_and_subtitle(path):
     if not parts:
         summary = load_json(JSON_FOLDER / "summary.json") or {}
         return (
-            "zonelists.com",
+            SITE_NAME,
             f"{summary.get('domains', 0):,} domains across {summary.get('tlds', 0):,} TLDs",
         )
 
@@ -145,7 +153,7 @@ def title_and_subtitle(path):
         data = load_json(JSON_FOLDER / tld / "latest") or {}
         return f".{tld} Domains", f"{data.get('domains', 0):,} registered domains"
 
-    return "zonelists.com", path
+    return SITE_NAME, path
 
 
 def wrap_text(draw, text, font, max_width):
@@ -187,7 +195,7 @@ def render_image(title, subtitle, out_path):
         draw.text((MARGIN, y), line, font=subtitle_font, fill=SUBTITLE_COLOR)
         y += 44
 
-    draw.text((MARGIN, HEIGHT - 70), "domain-zone-data", font=brand_font, fill=SUBTITLE_COLOR)
+    draw.text((MARGIN, HEIGHT - 70), SITE_NAME, font=brand_font, fill=SUBTITLE_COLOR)
 
     img.save(out_path, "PNG", optimize=True)
 

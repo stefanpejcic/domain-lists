@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 
-{% block title %}DNS provider market share, gains and losses ({{ data.date }}) | zonelists.com{% endblock %}
+{% block title %}DNS provider market share, gains and losses ({{ data.date }}) | {{ site_name }}{% endblock %}
 
 {% block description %}Which DNS and hosting providers run the {{ "{:,}".format(totals.domains or 0) }} domains in {{ "{:,}".format(totals.tlds or 0) }} TLDs, who gained and lost domains today, and where newly registered domains go. Built daily from ICANN CZDS zone files.{% endblock %}
 
 {% block structured_data %}
-{% from "_dataset_ld.html" import dataset %}
+{% from "_dataset_ld.html" import dataset with context %}
 {{ dataset("DNS provider market share for gTLD domains", "Number of domains per DNS provider (from nameserver records) across " ~ "{:,}".format(totals.tlds or 0) ~ " generic TLDs, with daily new registrations, domains moved in and out, and DNSSEC adoption.", "/api/v1/providers", data.last_updated, ["dns provider market share", "dns hosting statistics", "nameserver statistics", "dnssec adoption"]) }}
 {% endblock %}
 

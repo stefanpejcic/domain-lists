@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 
-{% block title %}Pending delete domains: {{ "{:,}".format(count) }} expected to drop on {{ date }} | zonelists.com{% endblock %}
+{% block title %}Pending delete domains: {{ "{:,}".format(count) }} expected to drop on {{ date }} | {{ site_name }}{% endblock %}
 
 {% block description %}{{ "{:,}".format(count) }} domains are expected to drop and become available to register on {{ date }}: they left the zone file about {{ data.drop_after_days }} days ago (expired, then redemption and pending delete) and never came back. Free daily pending delete list for every gTLD.{% endblock %}
 
 {% block structured_data %}
-{% from "_dataset_ld.html" import dataset %}
+{% from "_dataset_ld.html" import dataset with context %}
 {{ dataset("Pending delete domains expected to drop on " ~ date, "Domains expected to become available to register on " ~ date ~ ": they left their gTLD zone file " ~ data.drop_after_days ~ " days earlier (expiry, redemption, pending delete) and never came back. " ~ "{:,}".format(count) ~ " domains.", "/api/v1/pending-drop/" ~ date, data.last_updated, ["pending delete domains", "expiring domains", "drop list", "domains dropping today", "expired domains"]) }}
 {% endblock %}
 
