@@ -206,7 +206,8 @@ def main():
     # slug -> [title, subtitle] of the image on disk: an image is only drawn
     # again when its text changed (the cron job runs every hour).
     manifest = load_json(MANIFEST_FILE) or {}
-    if manifest.get("version") != RENDER_VERSION:
+    # the site name is drawn on every image
+    if manifest.get("version") != RENDER_VERSION or manifest.get("brand") != SITE_NAME:
         manifest = {}
     images = manifest.get("images", {})
 
@@ -224,7 +225,7 @@ def main():
 
     tmp = Path(str(MANIFEST_FILE) + ".tmp")
     with open(tmp, "w", encoding="utf-8") as f:
-        json.dump({"version": RENDER_VERSION, "images": seen}, f)
+        json.dump({"version": RENDER_VERSION, "brand": SITE_NAME, "images": seen}, f)
     tmp.replace(MANIFEST_FILE)
 
     print(f"OG images: {count} in sitemap, {drawn} drawn, {count - drawn} unchanged -> {OUTPUT_FOLDER}")
